@@ -1,0 +1,11 @@
+Product Requirements Summary
+Core concept: A mobile-first shared expense tracker for social occasions. Users create events, log purchases attributed to individuals, and the app calculates real-time net balances across the group.
+Key behaviors:
+Any user can create a tab (event) and invite members
+Members log expenses with a payer and an amount; costs split evenly among selected members
+Net balances update in real time as expenses are added
+Each user's home screen shows a consolidated view of what they owe and to whom, with checkboxes to mark payments as paid
+Users connect a Venmo and/or Cash App handle during onboarding
+Closing a tab is paywalled — one-time or subscription purchase required
+On tab close: generate deep-link venmo/cashapp payment URLs for each member who owes a balance, and send an SMS to every member with their balance and payment link
+Push notifications fire on tab close
