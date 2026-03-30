@@ -1,8 +1,8 @@
 beware.md is a guiderail file to help avoid pitfalls during development
+
 Balance calculation
 
-Never store balances as mutable fields — derive them from the expense ledger via a Postgres view or computed query. This prevents race conditions when multiple users add expenses simultaneously.
-Formula: for each member, balance = sum of expenses they paid for others − sum of their share of expenses others paid. Net positive = owed money, net negative = owes money.
+Never store balances as mutable fields - derive them from the expense ledger via a Postgres view or computed query. This prevents race conditions when multiple users add expenses simultaneously.
 
 Real-time sync
 
@@ -12,7 +12,7 @@ Balance recalculation should be triggered by expense inserts/deletes only — do
 Paywall enforcement
 
 RevenueCat purchase confirmation must be validated server-side via webhook before the backend executes tab close logic. Never trust a client-sent flag that a purchase succeeded.
-Tab close is a single backend transaction: validate purchase → mark tab closed → compute balances → generate links → fire Twilio. If any step fails, the tab should not be marked closed.
+Tab close is a single backend transaction: mark tab closed → compute balances → generate links → fire Twilio. If any step fails, the tab should not be marked closed.
 
 SMS orchestration on close
 
