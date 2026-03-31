@@ -28,7 +28,7 @@ CREATE TABLE tabs (
     id          UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
     name        TEXT        NOT NULL,
     description TEXT,
-    created_by  UUID        NOT NULL REFERENCES users(id),
+    created_by  UUID        NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     status      TEXT        NOT NULL DEFAULT 'open'
                             CHECK (status IN ('open', 'closed')),
     created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
@@ -58,8 +58,8 @@ CREATE TABLE tab_members (
 CREATE TABLE expenses (
     id          UUID           PRIMARY KEY DEFAULT gen_random_uuid(),
     tab_id      UUID           NOT NULL REFERENCES tabs(id) ON DELETE CASCADE,
-    payer_id    UUID           NOT NULL REFERENCES users(id),
-    created_by  UUID           NOT NULL REFERENCES users(id),
+    payer_id    UUID           NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    created_by  UUID           NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     title       TEXT           NOT NULL,
     amount      NUMERIC(10,2)  NOT NULL CHECK (amount > 0),
     created_at  TIMESTAMPTZ    NOT NULL DEFAULT NOW(),
@@ -76,7 +76,7 @@ CREATE TABLE expenses (
 CREATE TABLE expense_splits (
     id            UUID           PRIMARY KEY DEFAULT gen_random_uuid(),
     expense_id    UUID           NOT NULL REFERENCES expenses(id) ON DELETE CASCADE,
-    user_id       UUID           NOT NULL REFERENCES users(id),
+    user_id       UUID           NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     share_amount  NUMERIC(10,2)  NOT NULL CHECK (share_amount > 0),
     UNIQUE (expense_id, user_id)
 );
@@ -91,8 +91,8 @@ CREATE TABLE expense_splits (
 CREATE TABLE payments (
     id            UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
     tab_id        UUID        NOT NULL REFERENCES tabs(id) ON DELETE CASCADE,
-    payer_id      UUID        NOT NULL REFERENCES users(id),
-    recipient_id  UUID        NOT NULL REFERENCES users(id),
+    payer_id      UUID        NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    recipient_id  UUID        NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     marked_paid_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     UNIQUE (tab_id, payer_id, recipient_id)
 );

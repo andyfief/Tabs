@@ -51,11 +51,11 @@
 
 ## Closing a Tab
 
-- As a tab creator, I want to close a tab when the event is over so that final balances are settled and the tab is archived.
+- As a tab member, I want to close out my balances on my balances screen within a tab so that final balances are settled and the tab is archived.
 - As a user, I want to be informed that closing a tab requires a purchase so that I understand the paywall before proceeding.
-- As a user, I want the option to make a one-time purchase to close a tab so that I am not locked into a subscription.
+- As a user, I want the option to make a one-time purchase to close my tab balances so that I am not locked into a subscription.
 - As a user, I want the option to subscribe so that I can close tabs repeatedly without additional one-time fees.
-- As a user, when I close a tab, I want that tab to remain on people's homescreens, including my own - and not get sent to the recycle-bin style clear.
+- As a tab member, when I close out my balances, I want that tab to remain on people's homescreens, including my own - and not get sent to the recycle-bin style clear.
 
 ## Payments & Notifications on Close
 

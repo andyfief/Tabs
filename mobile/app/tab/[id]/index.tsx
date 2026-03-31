@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
+  Alert,
   FlatList,
   Pressable,
   RefreshControl,
@@ -8,10 +9,11 @@ import {
   Text,
   View,
 } from 'react-native';
+import * as Clipboard from 'expo-clipboard';
 import { Swipeable } from 'react-native-gesture-handler';
 import { useFocusEffect, useLocalSearchParams, useRouter, useNavigation } from 'expo-router';
 import { apiFetch } from '../../../utils/api';
-import { HARDCODED_USER_ID } from '../../../utils/constants';
+import { useSession } from '../../../hooks/useSession';
 
 // ─── Types ───────────────────────────────────────────────────
 
@@ -125,6 +127,7 @@ export default function TabDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
   const navigation = useNavigation();
+  const { userId } = useSession();
 
   const [tab, setTab] = useState<TabDetail | null>(null);
   const [expenses, setExpenses] = useState<Expense[]>([]);
@@ -134,6 +137,22 @@ export default function TabDetailScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const initialized = useRef(false);
+
+  const handleShowInvite = useCallback(async () => {
+    try {
+      const { code } = await apiFetch<{ code: string; tab_name: string }>(`/tabs/${id}/invite`);
+      Alert.alert(
+        'Invite Code',
+        `Share this code with anyone you want to add:\n\n${code}`,
+        [
+          { text: 'Copy Code', onPress: () => Clipboard.setStringAsync(code) },
+          { text: 'Done', style: 'cancel' },
+        ]
+      );
+    } catch {
+      Alert.alert('Error', 'Could not load invite code.');
+    }
+  }, [id]);
 
   const fetchAll = useCallback(async () => {
     try {
@@ -145,7 +164,14 @@ export default function TabDetailScreen() {
       setTab(tabData);
       setExpenses(expenseData);
       setBalances(balanceData);
-      navigation.setOptions({ title: tabData.name });
+      navigation.setOptions({
+        title: tabData.name,
+        headerRight: () => (
+          <Pressable onPress={handleShowInvite} style={{ marginRight: 8 }}>
+            <Text style={{ color: '#007AFF', fontSize: 15 }}>Invite</Text>
+          </Pressable>
+        ),
+      });
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : 'Failed to load tab.');
     }
@@ -214,7 +240,7 @@ export default function TabDetailScreen() {
     );
   }
 
-  const myBalances = toMyBalances(balances, HARDCODED_USER_ID);
+  const myBalances = toMyBalances(balances, userId ?? '');
   const iOwe = myBalances.filter((b) => b.i_owe);
   const owedToMe = myBalances.filter((b) => !b.i_owe);
 
