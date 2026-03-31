@@ -107,18 +107,21 @@ def toggle_clear_tab(tab_id: str, current_user: str = Depends(get_current_user))
 
 @router.get("/{tab_id}")
 def get_tab(tab_id: str, current_user: str = Depends(get_current_user)) -> dict:
-    """Return tab details and member list. Only accessible to tab members."""
+    """Return tab details, member list (with payment handles), and whether the
+    current user has unlocked balance payment links for this tab."""
     sb = get_supabase()
 
     membership = (
         sb.table("tab_members")
-        .select("user_id")
+        .select("user_id, links_unlocked_at")
         .eq("tab_id", tab_id)
         .eq("user_id", current_user)
         .execute()
     )
     if not membership.data:
         raise HTTPException(status_code=403, detail="Not a member of this tab.")
+
+    links_unlocked = membership.data[0]["links_unlocked_at"] is not None
 
     tab_res = (
         sb.table("tabs")
@@ -140,14 +143,41 @@ def get_tab(tab_id: str, current_user: str = Depends(get_current_user)) -> dict:
 
     users_res = (
         sb.table("users")
-        .select("id, display_name")
+        .select("id, display_name, venmo_handle, cashapp_handle")
         .in_("id", member_ids)
         .execute()
     )
-    name_map = {row["id"]: row["display_name"] for row in users_res.data}
     members = [
-        {"user_id": uid, "display_name": name_map.get(uid, "Unknown")}
-        for uid in member_ids
+        {
+            "user_id": u["id"],
+            "display_name": u["display_name"],
+            "venmo_handle": u.get("venmo_handle"),
+            "cashapp_handle": u.get("cashapp_handle"),
+        }
+        for u in users_res.data
     ]
 
-    return {**tab, "members": members}
+    return {**tab, "members": members, "links_unlocked": links_unlocked}
+
+
+@router.post("/{tab_id}/unlock-balance-links")
+def unlock_balance_links(tab_id: str, current_user: str = Depends(get_current_user)) -> dict:
+    """Set links_unlocked_at for the current user on this tab. One-time, irreversible."""
+    sb = get_supabase()
+
+    membership = (
+        sb.table("tab_members")
+        .select("user_id, links_unlocked_at")
+        .eq("tab_id", tab_id)
+        .eq("user_id", current_user)
+        .execute()
+    )
+    if not membership.data:
+        raise HTTPException(status_code=403, detail="Not a member of this tab.")
+
+    if membership.data[0]["links_unlocked_at"] is None:
+        sb.table("tab_members").update(
+            {"links_unlocked_at": datetime.now(timezone.utc).isoformat()}
+        ).eq("tab_id", tab_id).eq("user_id", current_user).execute()
+
+    return {"unlocked": True}

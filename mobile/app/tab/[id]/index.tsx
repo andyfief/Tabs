@@ -3,6 +3,8 @@ import {
   ActivityIndicator,
   Alert,
   FlatList,
+  Image,
+  Linking,
   Pressable,
   RefreshControl,
   StyleSheet,
@@ -16,12 +18,18 @@ import { useQuery } from '@tanstack/react-query';
 import { apiFetch } from '../../../utils/api';
 import { queryClient, TAB_DETAIL_STALE_TIME } from '../../../utils/queryClient';
 import { fetchTabDetail } from '../../../utils/tabQueries';
-import type { Expense, TabDetailFull } from '../../../utils/tabQueries';
+import { buildVenmoLink, buildCashAppLink } from '../../../utils/paymentLinks';
+import type { Expense, TabDetailFull, BalanceSettlement } from '../../../utils/tabQueries';
 import { useSession } from '../../../hooks/useSession';
 
 const DARK_BG = '#1c1c1e';
 const DARK_CARD = '#2c2c2e';
 const DARK_BORDER = '#3a3a3c';
+
+// eslint-disable-next-line @typescript-eslint/no-var-requires
+const VENMO_ICON = require('../../../assets/venmo.png') as number;
+// eslint-disable-next-line @typescript-eslint/no-var-requires
+const CASHAPP_ICON = require('../../../assets/cashapp.png') as number;
 
 // ─── Types ───────────────────────────────────────────────────
 
@@ -108,6 +116,80 @@ function ExpenseRow({ item, onToggle }: ExpenseRowProps) {
   );
 }
 
+// ─── Payment icons ────────────────────────────────────────────
+
+type PaymentIconsProps = {
+  venmoHandle: string | null;
+  cashappHandle: string | null;
+  unlocked: boolean;
+  onSettle: (platform: 'venmo' | 'cashapp', handle: string) => void;
+};
+
+function PaymentIcons({
+  venmoHandle,
+  cashappHandle,
+  unlocked,
+  onSettle,
+}: PaymentIconsProps) {
+  if (!venmoHandle && !cashappHandle) return null;
+
+  return (
+    <View style={styles.paymentIcons}>
+      {venmoHandle && (
+        <Pressable
+          onPress={unlocked ? () => onSettle('venmo', venmoHandle) : undefined}
+          style={styles.iconBtn}
+        >
+          <Image
+            source={VENMO_ICON}
+            style={[styles.iconImg, !unlocked && styles.iconDisabled]}
+          />
+        </Pressable>
+      )}
+      {cashappHandle && (
+        <Pressable
+          onPress={unlocked ? () => onSettle('cashapp', cashappHandle) : undefined}
+          style={styles.iconBtn}
+        >
+          <Image
+            source={CASHAPP_ICON}
+            style={[styles.iconImg, !unlocked && styles.iconDisabled]}
+          />
+        </Pressable>
+      )}
+    </View>
+  );
+}
+
+// ─── Settled balance row (swipeable to restore) ───────────────
+
+type SettledRowProps = {
+  item: BalanceSettlement;
+  onRestore: (id: string) => void;
+};
+
+function SettledRow({ item, onRestore }: SettledRowProps) {
+  const renderRightAction = () => (
+    <Pressable style={[styles.swipeAction, styles.swipeRestore]} onPress={() => onRestore(item.id)}>
+      <Text style={styles.swipeLabel}>Restore</Text>
+    </Pressable>
+  );
+
+  return (
+    <Swipeable renderRightActions={renderRightAction} overshootRight={false}>
+      <View style={[styles.balanceRow, styles.balanceRowSettled]}>
+        <View style={styles.balanceLeft}>
+          <Text style={[styles.balanceName, styles.textSettled]}>{item.counterpart_name}</Text>
+          <Text style={styles.settledMeta}>Settled {formatDate(item.settled_at)}</Text>
+        </View>
+        <Text style={[styles.balanceAmount, styles.textSettled]}>
+          {item.i_owe ? '−' : '+'}${item.amount.toFixed(2)}
+        </Text>
+      </View>
+    </Swipeable>
+  );
+}
+
 // ─── Screen ──────────────────────────────────────────────────
 
 type Panel = 'expenses' | 'balances';
@@ -127,7 +209,14 @@ export default function TabDetailScreen() {
     enabled: !!id,
   });
 
-  // Update header once tab name is available from cache or fresh fetch.
+  // links_unlocked is one-way: once true from the server it stays true.
+  // Local state lets us optimistically flip it without a full refetch.
+  const serverLinksUnlocked = data?.tab.links_unlocked ?? false;
+  const [linksUnlocked, setLinksUnlocked] = useState(serverLinksUnlocked);
+  useEffect(() => {
+    if (serverLinksUnlocked) setLinksUnlocked(true);
+  }, [serverLinksUnlocked]);
+
   const handleShowInvite = useCallback(async () => {
     try {
       const { code } = await apiFetch<{ code: string; tab_name: string }>(`/tabs/${id}/invite`);
@@ -156,13 +245,10 @@ export default function TabDetailScreen() {
     });
   }, [data?.tab.name, navigation, handleShowInvite]);
 
-  // Clear the pull-to-refresh spinner once the in-flight fetch settles.
   useEffect(() => {
     if (!isFetching) setRefreshing(false);
   }, [isFetching]);
 
-  // Refetch on every focus so data stays current after adding expenses.
-  // React Query deduplicates if a fetch is already in flight.
   useFocusEffect(
     useCallback(() => {
       refetch();
@@ -196,16 +282,151 @@ export default function TabDetailScreen() {
 
     try {
       await apiFetch(`/tabs/${id}/expenses/${expenseId}`, { method: 'PATCH' });
-      // Invalidate to pull fresh balances from the pairwise_balances view.
       queryClient.invalidateQueries({ queryKey: ['tab', id] });
     } catch {
-      // Revert optimistic update by fetching the source of truth.
       queryClient.invalidateQueries({ queryKey: ['tab', id] });
     }
   }, [id]);
 
-  // ── Loading / error states ──────────────────────────────────
-  // Only show a full-screen spinner on the very first load (no cached data).
+  // ── Balance link unlock ───────────────────────────────────
+  const handleUnlock = useCallback(async () => {
+    setLinksUnlocked(true);
+    try {
+      await apiFetch(`/tabs/${id}/unlock-balance-links`, { method: 'POST' });
+    } catch {
+      setLinksUnlocked(false);
+      Alert.alert('Error', 'Could not unlock balance links.');
+    }
+  }, [id]);
+
+  // ── Settle a balance (open payment link + record settlement) ─
+  const handleSettle = useCallback(async (
+    counterpartId: string,
+    counterpartName: string,
+    amount: number,
+    iOwe: boolean,
+    platform: 'venmo' | 'cashapp',
+    handle: string,
+  ) => {
+    const tabName = data?.tab.name ?? '';
+    const url = platform === 'venmo'
+      ? buildVenmoLink(handle, amount, tabName)
+      : buildCashAppLink(handle, amount, tabName);
+
+    Linking.openURL(url).catch(() =>
+      Alert.alert('Error', `Could not open ${platform === 'venmo' ? 'Venmo' : 'Cash App'}.`)
+    );
+
+    // Optimistically add settlement to cache.
+    const tempId = `temp-${Date.now()}`;
+    const optimistic: BalanceSettlement = {
+      id: tempId,
+      counterpart_id: counterpartId,
+      counterpart_name: counterpartName,
+      amount,
+      i_owe: iOwe,
+      settled_at: new Date().toISOString(),
+      restored_at: null,
+    };
+    queryClient.setQueryData<TabDetailFull>(['tab', id], (old) => {
+      if (!old) return old;
+      return { ...old, settlements: [...old.settlements, optimistic] };
+    });
+
+    try {
+      const result = await apiFetch<BalanceSettlement>(`/tabs/${id}/balance-settlements`, {
+        method: 'POST',
+        body: JSON.stringify({ counterpart_id: counterpartId, amount, i_owe: iOwe }),
+      });
+      queryClient.setQueryData<TabDetailFull>(['tab', id], (old) => {
+        if (!old) return old;
+        return {
+          ...old,
+          settlements: old.settlements.map((s) => (s.id === tempId ? result : s)),
+        };
+      });
+    } catch {
+      queryClient.setQueryData<TabDetailFull>(['tab', id], (old) => {
+        if (!old) return old;
+        return { ...old, settlements: old.settlements.filter((s) => s.id !== tempId) };
+      });
+    }
+  }, [id, data?.tab.name]);
+
+  // ── Restore a settled balance (swipe action on settled rows) ─
+  const handleRestore = useCallback(async (settlementId: string) => {
+    const now = new Date().toISOString();
+    queryClient.setQueryData<TabDetailFull>(['tab', id], (old) => {
+      if (!old) return old;
+      return {
+        ...old,
+        settlements: old.settlements.map((s) =>
+          s.id === settlementId ? { ...s, restored_at: now } : s
+        ),
+      };
+    });
+
+    try {
+      await apiFetch(`/tabs/${id}/balance-settlements/${settlementId}/restore`, { method: 'PATCH' });
+    } catch {
+      queryClient.setQueryData<TabDetailFull>(['tab', id], (old) => {
+        if (!old) return old;
+        return {
+          ...old,
+          settlements: old.settlements.map((s) =>
+            s.id === settlementId ? { ...s, restored_at: null } : s
+          ),
+        };
+      });
+    }
+  }, [id]);
+
+  // ── Re-settle a previously-restored balance (payment click on "previously settled" rows) ─
+  // Clears restored_at → moves the row back to the settled section without creating a new record.
+  const handleReSettle = useCallback(async (
+    settlementId: string,
+    amount: number,
+    platform: 'venmo' | 'cashapp',
+    handle: string,
+  ) => {
+    const tabName = data?.tab.name ?? '';
+    const url = platform === 'venmo'
+      ? buildVenmoLink(handle, amount, tabName)
+      : buildCashAppLink(handle, amount, tabName);
+
+    Linking.openURL(url).catch(() =>
+      Alert.alert('Error', `Could not open ${platform === 'venmo' ? 'Venmo' : 'Cash App'}.`)
+    );
+
+    // Optimistically clear restored_at (moves row back to settled section).
+    queryClient.setQueryData<TabDetailFull>(['tab', id], (old) => {
+      if (!old) return old;
+      return {
+        ...old,
+        settlements: old.settlements.map((s) =>
+          s.id === settlementId ? { ...s, restored_at: null } : s
+        ),
+      };
+    });
+
+    try {
+      await apiFetch(`/tabs/${id}/balance-settlements/${settlementId}/resettle`, { method: 'PATCH' });
+    } catch {
+      // Revert: put it back in the active section.
+      const now = new Date().toISOString();
+      queryClient.setQueryData<TabDetailFull>(['tab', id], (old) => {
+        if (!old) return old;
+        return {
+          ...old,
+          settlements: old.settlements.map((s) =>
+            s.id === settlementId ? { ...s, restored_at: now } : s
+          ),
+        };
+      });
+    }
+  }, [id, data?.tab.name]);
+
+  // ── Loading / error states ────────────────────────────────
 
   if (isLoading) {
     return <View style={styles.center}><ActivityIndicator color="#fff" /></View>;
@@ -221,10 +442,163 @@ export default function TabDetailScreen() {
     );
   }
 
-  const { tab, expenses, balances } = data;
+  const { tab, expenses, balances, settlements } = data;
   const myBalances = toMyBalances(balances, userId ?? '');
-  const iOwe = myBalances.filter((b) => b.i_owe);
-  const owedToMe = myBalances.filter((b) => !b.i_owe);
+  const memberMap = Object.fromEntries(tab.members.map((m) => [m.user_id, m]));
+
+  // ── Balance display computation ───────────────────────────
+  //
+  // outstanding = viewAmount - sum(ALL settlements for this counterpart)
+  // This means: settled amounts subtract from the view total regardless of
+  // whether they've been restored. Restored settlements each show as their own
+  // active row so the per-counterpart totals still reconcile.
+
+  function totalSettledFor(counterpartId: string): number {
+    return settlements
+      .filter((s) => s.counterpart_id === counterpartId)
+      .reduce((sum, s) => sum + s.amount, 0);
+  }
+
+  // Active outstanding rows (one per counterpart where net > $0.005).
+  const outstandingBalances = myBalances
+    .map((b) => ({
+      ...b,
+      outstanding: Math.max(0, b.amount - totalSettledFor(b.counterpart_id)),
+    }))
+    .filter((b) => b.outstanding > 0.005);
+
+  const outstandingIOwe = outstandingBalances.filter((b) => b.i_owe);
+  const outstandingOwedToMe = outstandingBalances.filter((b) => !b.i_owe);
+
+  // Restored settlements — each is its own active row.
+  const restoredSettlements = settlements.filter((s) => s.restored_at !== null);
+  const restoredIOwe = restoredSettlements.filter((s) => s.i_owe);
+  const restoredOwedToMe = restoredSettlements.filter((s) => !s.i_owe);
+
+  // Non-restored settlements — shown greyed at the bottom.
+  const settledItems = settlements
+    .filter((s) => s.restored_at === null)
+    .sort((a, b) => b.settled_at.localeCompare(a.settled_at));
+
+  const hasAnyActiveBalance =
+    outstandingBalances.length > 0 || restoredSettlements.length > 0;
+  const hasAnything = hasAnyActiveBalance || settledItems.length > 0;
+
+  // ─── Active balance row renderer ────────────────────────────
+
+  type ActiveRowConfig = {
+    key: string;
+    counterpart_id: string;
+    counterpart_name: string;
+    amount: number;
+    i_owe: boolean;
+    previously_settled: boolean;
+    // Set only for previously-settled rows — used to re-settle on payment.
+    settlement_id?: string;
+  };
+
+  function renderActiveRow(cfg: ActiveRowConfig) {
+    const member = memberMap[cfg.counterpart_id];
+    const venmoHandle = member?.venmo_handle ?? null;
+    const cashappHandle = member?.cashapp_handle ?? null;
+
+    return (
+      <View key={cfg.key} style={styles.balanceRow}>
+        <View style={styles.balanceLeft}>
+          <Text style={styles.balanceName}>{cfg.counterpart_name}</Text>
+          {cfg.previously_settled && (
+            <Text style={styles.previouslySettledTag}>previously settled</Text>
+          )}
+        </View>
+        <View style={styles.balanceRight}>
+          <Text style={[styles.balanceAmount, cfg.i_owe ? styles.owe : styles.owed]}>
+            {cfg.i_owe ? '−' : '+'}${cfg.amount.toFixed(2)}
+          </Text>
+          <PaymentIcons
+            venmoHandle={venmoHandle}
+            cashappHandle={cashappHandle}
+            unlocked={linksUnlocked}
+            onSettle={(platform, handle) =>
+              cfg.previously_settled && cfg.settlement_id
+                ? handleReSettle(cfg.settlement_id, cfg.amount, platform, handle)
+                : handleSettle(cfg.counterpart_id, cfg.counterpart_name, cfg.amount, cfg.i_owe, platform, handle)
+            }
+          />
+        </View>
+      </View>
+    );
+  }
+
+  // ─── Balances panel header ───────────────────────────────────
+
+  const balancesHeader = !hasAnything ? (
+    <View style={styles.emptyState}>
+      <Text style={styles.emptyText}>You're all settled up.</Text>
+    </View>
+  ) : (
+    <>
+      {/* You owe section */}
+      {(outstandingIOwe.length > 0 || restoredIOwe.length > 0) && (
+        <>
+          <Text style={styles.balanceSection}>You owe</Text>
+          {outstandingIOwe.map((b) =>
+            renderActiveRow({
+              key: b.counterpart_id,
+              counterpart_id: b.counterpart_id,
+              counterpart_name: b.counterpart_name,
+              amount: b.outstanding,
+              i_owe: true,
+              previously_settled: false,
+            })
+          )}
+          {restoredIOwe.map((s) =>
+            renderActiveRow({
+              key: `restored-${s.id}`,
+              counterpart_id: s.counterpart_id,
+              counterpart_name: s.counterpart_name,
+              amount: s.amount,
+              i_owe: true,
+              previously_settled: true,
+              settlement_id: s.id,
+            })
+          )}
+        </>
+      )}
+
+      {/* Owed to you section */}
+      {(outstandingOwedToMe.length > 0 || restoredOwedToMe.length > 0) && (
+        <>
+          <Text style={styles.balanceSection}>Owed to you</Text>
+          {outstandingOwedToMe.map((b) =>
+            renderActiveRow({
+              key: b.counterpart_id,
+              counterpart_id: b.counterpart_id,
+              counterpart_name: b.counterpart_name,
+              amount: b.outstanding,
+              i_owe: false,
+              previously_settled: false,
+            })
+          )}
+          {restoredOwedToMe.map((s) =>
+            renderActiveRow({
+              key: `restored-${s.id}`,
+              counterpart_id: s.counterpart_id,
+              counterpart_name: s.counterpart_name,
+              amount: s.amount,
+              i_owe: false,
+              previously_settled: true,
+              settlement_id: s.id,
+            })
+          )}
+        </>
+      )}
+
+      {/* Settled section header (rows rendered via FlatList data) */}
+      {settledItems.length > 0 && (
+        <Text style={styles.balanceSection}>Settled</Text>
+      )}
+    </>
+  );
 
   return (
     <View style={styles.container}>
@@ -284,48 +658,22 @@ export default function TabDetailScreen() {
 
       {/* My Balances panel */}
       {panel === 'balances' && (
-        <FlatList
-          data={[]}
-          keyExtractor={() => ''}
-          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#fff" />}
-          ListHeaderComponent={
-            myBalances.length === 0 ? (
-              <View style={styles.emptyState}>
-                <Text style={styles.emptyText}>You're all settled up.</Text>
-              </View>
-            ) : (
-              <>
-                {iOwe.length > 0 && (
-                  <>
-                    <Text style={styles.balanceSection}>You owe</Text>
-                    {iOwe.map((b) => (
-                      <View key={b.counterpart_id} style={styles.balanceRow}>
-                        <Text style={styles.balanceName}>{b.counterpart_name}</Text>
-                        <Text style={[styles.balanceAmount, styles.owe]}>
-                          −${b.amount.toFixed(2)}
-                        </Text>
-                      </View>
-                    ))}
-                  </>
-                )}
-                {owedToMe.length > 0 && (
-                  <>
-                    <Text style={styles.balanceSection}>Owed to you</Text>
-                    {owedToMe.map((b) => (
-                      <View key={b.counterpart_id} style={styles.balanceRow}>
-                        <Text style={styles.balanceName}>{b.counterpart_name}</Text>
-                        <Text style={[styles.balanceAmount, styles.owed]}>
-                          +${b.amount.toFixed(2)}
-                        </Text>
-                      </View>
-                    ))}
-                  </>
-                )}
-              </>
-            )
-          }
-          renderItem={() => null}
-        />
+        <View style={styles.balancesPanel}>
+          <FlatList
+            data={settledItems}
+            keyExtractor={(item) => item.id}
+            refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#fff" />}
+            ListHeaderComponent={balancesHeader}
+            renderItem={({ item }) => (
+              <SettledRow item={item} onRestore={handleRestore} />
+            )}
+          />
+          {!linksUnlocked && hasAnything && (
+            <Pressable style={styles.unlockBtn} onPress={handleUnlock}>
+              <Text style={styles.unlockBtnLabel}>Close My Balances</Text>
+            </Pressable>
+          )}
+        </View>
       )}
     </View>
   );
@@ -377,20 +725,49 @@ const styles = StyleSheet.create({
   swipeRestore: { backgroundColor: '#30d158' },
   swipeLabel: { color: '#fff', fontWeight: '600', fontSize: 14 },
 
+  // ── Balances ──────────────────────────────────────────────
+
+  balancesPanel: { flex: 1 },
+
   balanceSection: {
     fontSize: 12, fontWeight: '600', color: '#8e8e93',
     paddingHorizontal: 16, paddingTop: 16, paddingBottom: 6,
     textTransform: 'uppercase', letterSpacing: 0.5,
   },
   balanceRow: {
-    flexDirection: 'row', justifyContent: 'space-between',
-    paddingHorizontal: 16, paddingVertical: 12,
-    borderBottomWidth: StyleSheet.hairlineWidth, borderColor: DARK_BORDER,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderColor: DARK_BORDER,
+    backgroundColor: DARK_CARD,
   },
+  balanceRowSettled: { backgroundColor: '#242426' },
+  balanceLeft: { flex: 1, marginRight: 12 },
+  balanceRight: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   balanceName: { fontSize: 15, color: '#fff' },
   balanceAmount: { fontSize: 15, fontWeight: '600' },
   owe: { color: '#ff453a' },
   owed: { color: '#30d158' },
+  textSettled: { color: '#555' },
+  settledMeta: { fontSize: 11, color: '#555', marginTop: 2 },
+  previouslySettledTag: { fontSize: 11, color: '#8e8e93', marginTop: 2 },
+
+  paymentIcons: { flexDirection: 'row', gap: 6 },
+  iconBtn: { padding: 2 },
+  iconImg: { width: 26, height: 26, resizeMode: 'contain' },
+  iconDisabled: { opacity: 0.3 },
+
+  unlockBtn: {
+    margin: 12,
+    padding: 14,
+    backgroundColor: DARK_BORDER,
+    borderRadius: 7,
+    alignItems: 'center',
+  },
+  unlockBtnLabel: { color: '#fff', fontWeight: '600', fontSize: 14 },
 
   emptyState: { padding: 32, alignItems: 'center' },
   emptyText: { color: '#8e8e93', fontSize: 14 },

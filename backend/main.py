@@ -1,7 +1,7 @@
 import logging
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
-from routers import tabs, expenses, users, invites
+from routers import tabs, expenses, users, invites, settlements
 
 logger = logging.getLogger("uvicorn.error")
 
@@ -10,6 +10,7 @@ app.include_router(tabs.router)
 app.include_router(expenses.router)
 app.include_router(users.router)
 app.include_router(invites.router)
+app.include_router(settlements.router)
 
 
 @app.exception_handler(Exception)
