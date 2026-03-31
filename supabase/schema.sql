@@ -44,6 +44,7 @@ CREATE TABLE tab_members (
     tab_id      UUID        NOT NULL REFERENCES tabs(id) ON DELETE CASCADE,
     user_id     UUID        NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     joined_at   TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    cleared_at  TIMESTAMPTZ,                            -- NULL = on homescreen; set = cleared by this user
     PRIMARY KEY (tab_id, user_id)
 );
 
@@ -61,7 +62,8 @@ CREATE TABLE expenses (
     created_by  UUID           NOT NULL REFERENCES users(id),
     title       TEXT           NOT NULL,
     amount      NUMERIC(10,2)  NOT NULL CHECK (amount > 0),
-    created_at  TIMESTAMPTZ    NOT NULL DEFAULT NOW()
+    created_at  TIMESTAMPTZ    NOT NULL DEFAULT NOW(),
+    removed_at  TIMESTAMPTZ                              -- NULL = active; set = soft-removed
 );
 
 
@@ -138,6 +140,7 @@ FROM (
     FROM expenses e
     JOIN expense_splits es ON es.expense_id = e.id
     WHERE es.user_id <> e.payer_id
+      AND e.removed_at IS NULL
 ) ledger
 GROUP BY
     tab_id,
