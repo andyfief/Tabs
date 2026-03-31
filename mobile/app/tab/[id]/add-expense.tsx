@@ -12,6 +12,10 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { apiFetch } from '../../../utils/api';
 import { HARDCODED_USER_ID } from '../../../utils/constants';
 
+const DARK_BG = '#1c1c1e';
+const DARK_CARD = '#2c2c2e';
+const DARK_BORDER = '#3a3a3c';
+
 type Member = { user_id: string; display_name: string };
 
 export default function AddExpenseScreen() {
@@ -76,7 +80,7 @@ export default function AddExpenseScreen() {
   if (loadingMembers) {
     return (
       <View style={styles.center}>
-        <ActivityIndicator />
+        <ActivityIndicator color="#fff" />
       </View>
     );
   }
@@ -88,6 +92,7 @@ export default function AddExpenseScreen() {
       <TextInput
         style={styles.input}
         placeholder="e.g. Dinner, Uber, Groceries"
+        placeholderTextColor="#555"
         value={title}
         onChangeText={setTitle}
         autoFocus
@@ -98,6 +103,7 @@ export default function AddExpenseScreen() {
       <TextInput
         style={styles.input}
         placeholder="0.00"
+        placeholderTextColor="#555"
         value={amount}
         onChangeText={setAmount}
         keyboardType="decimal-pad"
@@ -155,23 +161,24 @@ export default function AddExpenseScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#fff' },
+  container: { flex: 1, backgroundColor: DARK_BG },
   content: { padding: 16, paddingBottom: 40 },
   center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
 
-  label: { fontSize: 13, fontWeight: '600', color: '#555', marginTop: 20, marginBottom: 6 },
+  label: { fontSize: 13, fontWeight: '600', color: '#8e8e93', marginTop: 20, marginBottom: 6 },
   input: {
     borderWidth: 1,
-    borderColor: '#ccc',
+    borderColor: DARK_BORDER,
     borderRadius: 6,
     padding: 10,
     fontSize: 15,
+    color: '#fff',
   },
 
   // Capped-height scrollable member list
   listBox: {
     borderWidth: 1,
-    borderColor: '#ccc',
+    borderColor: DARK_BORDER,
     borderRadius: 6,
     maxHeight: 160,
     overflow: 'hidden',
@@ -183,9 +190,10 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 10,
     borderBottomWidth: StyleSheet.hairlineWidth,
-    borderColor: '#eee',
+    borderColor: DARK_BORDER,
+    backgroundColor: DARK_CARD,
   },
-  memberName: { fontSize: 15, marginLeft: 10 },
+  memberName: { fontSize: 15, marginLeft: 10, color: '#fff' },
 
   // Shared check indicator (radio = circle, checkbox = square)
   check: {
@@ -193,12 +201,12 @@ const styles = StyleSheet.create({
     height: 20,
     borderRadius: 10,
     borderWidth: 2,
-    borderColor: '#ccc',
+    borderColor: DARK_BORDER,
     justifyContent: 'center',
     alignItems: 'center',
   },
   checkSquare: { borderRadius: 4 },
-  checkSelected: { borderColor: '#000', backgroundColor: '#000' },
+  checkSelected: { borderColor: '#0a84ff', backgroundColor: '#0a84ff' },
   checkInner: {
     width: 8,
     height: 8,
@@ -206,11 +214,11 @@ const styles = StyleSheet.create({
     backgroundColor: '#fff',
   },
 
-  error: { color: 'red', fontSize: 13, marginTop: 14 },
+  error: { color: '#ff453a', fontSize: 13, marginTop: 14 },
   submitBtn: {
     marginTop: 28,
     padding: 14,
-    backgroundColor: '#000',
+    backgroundColor: DARK_BORDER,
     borderRadius: 8,
     alignItems: 'center',
   },

@@ -14,6 +14,9 @@ import { useRouter } from 'expo-router';
 import { apiFetch } from '../utils/api';
 import { useAuth } from '../context/AuthContext';
 
+const DARK_BG = '#1c1c1e';
+const DARK_BORDER = '#3a3a3c';
+
 export default function ProfileSetupScreen() {
   const router = useRouter();
   const { markProfileReady } = useAuth();
@@ -61,6 +64,7 @@ export default function ProfileSetupScreen() {
         <TextInput
           style={styles.input}
           placeholder="Your name"
+          placeholderTextColor="#555"
           value={displayName}
           onChangeText={setDisplayName}
           autoFocus
@@ -75,6 +79,7 @@ export default function ProfileSetupScreen() {
         <TextInput
           style={styles.input}
           placeholder="@username"
+          placeholderTextColor="#555"
           value={venmo}
           onChangeText={setVenmo}
           autoCapitalize="none"
@@ -84,6 +89,7 @@ export default function ProfileSetupScreen() {
         <TextInput
           style={styles.input}
           placeholder="$username"
+          placeholderTextColor="#555"
           value={cashapp}
           onChangeText={setCashapp}
           autoCapitalize="none"
@@ -100,20 +106,20 @@ export default function ProfileSetupScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#fff' },
+  container: { flex: 1, backgroundColor: DARK_BG },
   inner: { padding: 28, paddingBottom: 48 },
-  title: { fontSize: 26, fontWeight: '700', marginBottom: 8, marginTop: 20 },
-  subtitle: { fontSize: 15, color: '#666', marginBottom: 32 },
-  label: { fontSize: 13, fontWeight: '600', color: '#555', marginTop: 16, marginBottom: 6 },
-  sectionHeading: { fontSize: 17, fontWeight: '700', marginTop: 36, marginBottom: 4 },
-  sectionSubtitle: { fontSize: 13, color: '#888', marginBottom: 4 },
+  title: { fontSize: 26, fontWeight: '700', marginBottom: 8, marginTop: 20, color: '#fff' },
+  subtitle: { fontSize: 15, color: '#8e8e93', marginBottom: 32 },
+  label: { fontSize: 13, fontWeight: '600', color: '#8e8e93', marginTop: 16, marginBottom: 6 },
+  sectionHeading: { fontSize: 17, fontWeight: '700', marginTop: 36, marginBottom: 4, color: '#fff' },
+  sectionSubtitle: { fontSize: 13, color: '#8e8e93', marginBottom: 4 },
   input: {
-    borderWidth: 1, borderColor: '#ccc', borderRadius: 6,
-    padding: 10, fontSize: 15,
+    borderWidth: 1, borderColor: DARK_BORDER, borderRadius: 6,
+    padding: 10, fontSize: 15, color: '#fff',
   },
-  error: { color: 'red', fontSize: 13, marginTop: 14 },
+  error: { color: '#ff453a', fontSize: 13, marginTop: 14 },
   btn: {
-    marginTop: 32, padding: 14, backgroundColor: '#000',
+    marginTop: 32, padding: 14, backgroundColor: DARK_BORDER,
     borderRadius: 8, alignItems: 'center',
   },
   btnLabel: { color: '#fff', fontWeight: '600', fontSize: 15 },

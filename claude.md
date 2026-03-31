@@ -22,7 +22,7 @@ REVENUECAT_WEBHOOK_SECRET
 ### `mobile/.env`
 ```
 EXPO_PUBLIC_SUPABASE_URL
-EXPO_SUPABASE_PUBLISHABLE_KEY   # Supabase Publishable key (safe for client)
+EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY   # Supabase Publishable key (safe for client)
 EXPO_PROJECT_ID                 # Set after expo init
 ```
 

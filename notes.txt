@@ -1,3 +1,7 @@
 
 /mobile: npx expo start
 /backend: uvicorn main:app --reload --host 0.0.0.0 --port 8000
+
+test numbers:
+    +15550000001 → 111111
+    +15550000002 → 111111
