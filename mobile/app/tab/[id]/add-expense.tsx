@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Pressable,
@@ -9,39 +9,47 @@ import {
   View,
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useQuery } from '@tanstack/react-query';
 import { apiFetch } from '../../../utils/api';
+import { queryClient, TAB_DETAIL_STALE_TIME } from '../../../utils/queryClient';
+import { fetchTabDetail } from '../../../utils/tabQueries';
+import type { Member } from '../../../utils/tabQueries';
 import { HARDCODED_USER_ID } from '../../../utils/constants';
 
 const DARK_BG = '#1c1c1e';
 const DARK_CARD = '#2c2c2e';
 const DARK_BORDER = '#3a3a3c';
 
-type Member = { user_id: string; display_name: string };
-
 export default function AddExpenseScreen() {
   const { id: tabId } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
 
-  const [members, setMembers] = useState<Member[]>([]);
+  // Reuse the same cache entry as the tab detail screen — no extra fetch needed.
+  const { data, isLoading } = useQuery({
+    queryKey: ['tab', tabId],
+    queryFn: () => fetchTabDetail(tabId!),
+    staleTime: TAB_DETAIL_STALE_TIME,
+    enabled: !!tabId,
+  });
+
+  const members: Member[] = data?.tab.members ?? [];
+
   const [title, setTitle] = useState('');
   const [amount, setAmount] = useState('');
   const [payerId, setPayerId] = useState(HARDCODED_USER_ID);
-  // All members selected for the split by default
   const [splitIds, setSplitIds] = useState<Set<string>>(new Set());
+  const splitInitialized = useRef(false);
 
-  const [loadingMembers, setLoadingMembers] = useState(true);
+  // Seed splitIds with all members once, the first time the member list arrives.
+  // The ref guard prevents a background refetch from resetting the user's selection.
+  useEffect(() => {
+    if (splitInitialized.current || members.length === 0) return;
+    setSplitIds(new Set(members.map((m) => m.user_id)));
+    splitInitialized.current = true;
+  }, [members]);
+
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    apiFetch<{ id: string; members: Member[] }>(`/tabs/${tabId}`)
-      .then((tab) => {
-        setMembers(tab.members);
-        setSplitIds(new Set(tab.members.map((m) => m.user_id)));
-      })
-      .catch((e: Error) => setError(e.message))
-      .finally(() => setLoadingMembers(false));
-  }, [tabId]);
 
   function toggleSplit(userId: string) {
     setSplitIds((prev) => {
@@ -69,6 +77,8 @@ export default function AddExpenseScreen() {
           split_member_ids: Array.from(splitIds),
         }),
       });
+      // Invalidate so the tab detail screen refetches expenses and balances.
+      queryClient.invalidateQueries({ queryKey: ['tab', tabId] });
       router.back();
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : 'Something went wrong.');
@@ -77,7 +87,7 @@ export default function AddExpenseScreen() {
     }
   }
 
-  if (loadingMembers) {
+  if (isLoading) {
     return (
       <View style={styles.center}>
         <ActivityIndicator color="#fff" />

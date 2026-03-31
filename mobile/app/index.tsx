@@ -9,10 +9,13 @@ import {
   TouchableWithoutFeedback,
   View,
 } from 'react-native';
+import type { ViewToken } from 'react-native';
 import { Swipeable } from 'react-native-gesture-handler';
 import { useFocusEffect, useNavigation, useRouter } from 'expo-router';
 import { apiFetch } from '../utils/api';
 import { supabase } from '../utils/supabase';
+import { queryClient, TAB_DETAIL_STALE_TIME } from '../utils/queryClient';
+import { fetchTabDetail } from '../utils/tabQueries';
 
 const DARK_BG = '#1c1c1e';
 const DARK_CARD = '#2c2c2e';
@@ -57,6 +60,35 @@ export default function HomeScreen() {
   const [error, setError] = useState<string | null>(null);
   const [menuOpen, setMenuOpen] = useState(false);
   const initialized = useRef(false);
+
+  // Kept in a ref so the FlatList callback never changes identity after mount.
+  const tabsRef = useRef<Tab[]>([]);
+  tabsRef.current = tabs;
+
+  // Prefetch visible tabs plus up to 3 items below the viewport.
+  const onViewableItemsChanged = useRef(
+    ({ viewableItems }: { viewableItems: ViewToken[] }) => {
+      const list = tabsRef.current;
+      viewableItems.forEach(({ index }) => {
+        if (index === null) return;
+        for (let i = index; i <= Math.min(index + 3, list.length - 1); i++) {
+          const tab = list[i];
+          if (tab) {
+            queryClient.prefetchQuery({
+              queryKey: ['tab', tab.id],
+              queryFn: () => fetchTabDetail(tab.id),
+              staleTime: TAB_DETAIL_STALE_TIME,
+            });
+          }
+        }
+      });
+    }
+  ).current;
+
+  const viewabilityConfig = useRef({
+    minimumViewTime: 200,
+    itemVisiblePercentThreshold: 50,
+  }).current;
 
   const fetchTabs = useCallback(async () => {
     try {
@@ -141,6 +173,8 @@ export default function HomeScreen() {
       <FlatList
         data={tabs}
         keyExtractor={(item) => item.id}
+        onViewableItemsChanged={onViewableItemsChanged}
+        viewabilityConfig={viewabilityConfig}
         renderItem={({ item }) => (
           <TabRow
             item={item}
