@@ -10,6 +10,7 @@ import {
 import { Swipeable } from 'react-native-gesture-handler';
 import { useFocusEffect, useNavigation, useRouter } from 'expo-router';
 import { apiFetch } from '../utils/api';
+import { supabase } from '../utils/supabase';
 
 type Tab = {
   id: string;
@@ -17,8 +18,6 @@ type Tab = {
   description: string | null;
   member_count: number;
 };
-
-// ─── Tab row with swipe-to-clear ─────────────────────────────
 
 type TabRowProps = {
   item: Tab;
@@ -32,7 +31,6 @@ function TabRow({ item, onPress, onClear }: TabRowProps) {
       <Text style={styles.swipeLabel}>Clear</Text>
     </Pressable>
   );
-
   return (
     <Swipeable renderRightActions={renderRightAction} overshootRight={false}>
       <Pressable style={styles.row} onPress={onPress}>
@@ -44,8 +42,6 @@ function TabRow({ item, onPress, onClear }: TabRowProps) {
     </Swipeable>
   );
 }
-
-// ─── Screen ──────────────────────────────────────────────────
 
 export default function HomeScreen() {
   const router = useRouter();
@@ -78,41 +74,39 @@ export default function HomeScreen() {
     }, [fetchTabs])
   );
 
-  // Archive button in top-right corner of the header
   useEffect(() => {
     navigation.setOptions({
       headerRight: () => (
-        <Pressable
-          style={styles.archiveBtn}
-          onPress={() => router.push('/cleared-tabs')}
-        >
-          <Text style={styles.archiveBtnLabel}>Cleared</Text>
-        </Pressable>
+        <View style={styles.headerRight}>
+          <Pressable style={styles.headerBtn} onPress={() => router.push('/join')}>
+            <Text style={styles.headerBtnLabel}>Join</Text>
+          </Pressable>
+          <Pressable style={styles.headerBtn} onPress={() => router.push('/cleared-tabs')}>
+            <Text style={styles.headerBtnLabel}>Cleared</Text>
+          </Pressable>
+          {process.env.EXPO_PUBLIC_SKIP_AUTH !== 'true' && (
+            <Pressable style={styles.headerBtn} onPress={() => supabase.auth.signOut()}>
+              <Text style={[styles.headerBtnLabel, styles.signOutLabel]}>Sign Out</Text>
+            </Pressable>
+          )}
+        </View>
       ),
     });
   }, [navigation, router]);
 
   const handleClear = useCallback(async (tabId: string) => {
-    // Optimistic: remove from list immediately
     setTabs((prev) => prev.filter((t) => t.id !== tabId));
     try {
       await apiFetch(`/tabs/${tabId}/clear`, { method: 'PATCH' });
     } catch {
-      // Revert on failure
       fetchTabs();
     }
   }, [fetchTabs]);
 
-  if (loading) {
-    return <View style={styles.center}><ActivityIndicator /></View>;
-  }
+  if (loading) return <View style={styles.center}><ActivityIndicator /></View>;
 
   if (error) {
-    return (
-      <View style={styles.center}>
-        <Text style={styles.error}>{error}</Text>
-      </View>
-    );
+    return <View style={styles.center}><Text style={styles.error}>{error}</Text></View>;
   }
 
   return (
@@ -134,9 +128,14 @@ export default function HomeScreen() {
         }
         contentContainerStyle={tabs.length === 0 ? styles.emptyContainer : undefined}
       />
-      <Pressable style={styles.fab} onPress={() => router.push('/create-tab')}>
-        <Text style={styles.fabLabel}>+ New Tab</Text>
-      </Pressable>
+      <View style={styles.bottomRow}>
+        <Pressable style={[styles.fab, styles.fabSecondary]} onPress={() => router.push('/join')}>
+          <Text style={styles.fabSecondaryLabel}>Join Tab</Text>
+        </Pressable>
+        <Pressable style={styles.fab} onPress={() => router.push('/create-tab')}>
+          <Text style={styles.fabLabel}>+ New Tab</Text>
+        </Pressable>
+      </View>
     </View>
   );
 }
@@ -163,17 +162,20 @@ const styles = StyleSheet.create({
   },
   swipeLabel: { color: '#fff', fontWeight: '600', fontSize: 14 },
 
-  archiveBtn: { marginRight: 4, padding: 6 },
-  archiveBtnLabel: { fontSize: 14, color: '#888' },
+  headerRight: { flexDirection: 'row', gap: 8, marginRight: 4 },
+  headerBtn: { padding: 6 },
+  headerBtnLabel: { fontSize: 14, color: '#888' },
+  signOutLabel: { color: '#c0392b' },
+
+  bottomRow: { flexDirection: 'row', gap: 10, margin: 16 },
+  fab: {
+    flex: 1, padding: 14, backgroundColor: '#000',
+    borderRadius: 8, alignItems: 'center',
+  },
+  fabLabel: { color: '#fff', fontWeight: '600', fontSize: 15 },
+  fabSecondary: { backgroundColor: '#fff', borderWidth: 1, borderColor: '#000' },
+  fabSecondaryLabel: { color: '#000', fontWeight: '600', fontSize: 15 },
 
   empty: { color: '#999', fontSize: 15 },
   error: { color: 'red', fontSize: 14, textAlign: 'center', padding: 16 },
-  fab: {
-    margin: 16,
-    padding: 14,
-    backgroundColor: '#000',
-    borderRadius: 8,
-    alignItems: 'center',
-  },
-  fabLabel: { color: '#fff', fontWeight: '600', fontSize: 15 },
 });

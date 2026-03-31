@@ -1,8 +1,9 @@
 from datetime import datetime, timezone
 from decimal import Decimal, ROUND_DOWN
-from fastapi import APIRouter, Header, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from models.expense import ExpenseCreate
 from services.supabase import get_supabase
+from services.auth import get_current_user
 
 router = APIRouter(prefix="/tabs/{tab_id}/expenses", tags=["expenses"])
 
@@ -37,11 +38,11 @@ def _even_splits(amount: float, member_ids: list[str]) -> list[dict]:
 def create_expense(
     tab_id: str,
     body: ExpenseCreate,
-    x_user_id: str = Header(...),
+    current_user: str = Depends(get_current_user),
 ) -> dict:
     """Create an expense and its splits. Validates membership for caller and all split members."""
     sb = get_supabase()
-    _assert_member(sb, tab_id, x_user_id)
+    _assert_member(sb, tab_id, current_user)
 
     # Verify payer and all split members belong to the tab
     members_res = (
@@ -63,7 +64,7 @@ def create_expense(
         .insert({
             "tab_id": tab_id,
             "payer_id": body.payer_id,
-            "created_by": x_user_id,
+            "created_by": current_user,
             "title": body.title,
             "amount": body.amount,
         })
@@ -81,13 +82,13 @@ def create_expense(
 
 
 @router.get("")
-def list_expenses(tab_id: str, x_user_id: str = Header(...)) -> list[dict]:
+def list_expenses(tab_id: str, current_user: str = Depends(get_current_user)) -> list[dict]:
     """
     Return all expenses for a tab — active ones first (newest first),
     removed ones appended at the bottom (most recently removed first).
     """
     sb = get_supabase()
-    _assert_member(sb, tab_id, x_user_id)
+    _assert_member(sb, tab_id, current_user)
 
     res = (
         sb.table("expenses")
@@ -129,11 +130,11 @@ def list_expenses(tab_id: str, x_user_id: str = Header(...)) -> list[dict]:
 def toggle_remove_expense(
     tab_id: str,
     expense_id: str,
-    x_user_id: str = Header(...),
+    current_user: str = Depends(get_current_user),
 ) -> dict:
     """Toggle soft-remove on an expense. Active → removed; removed → restored."""
     sb = get_supabase()
-    _assert_member(sb, tab_id, x_user_id)
+    _assert_member(sb, tab_id, current_user)
 
     res = (
         sb.table("expenses")
@@ -153,7 +154,7 @@ def toggle_remove_expense(
 
 
 @router.get("/balances")
-def get_balances(tab_id: str, x_user_id: str = Header(...)) -> list[dict]:
+def get_balances(tab_id: str, current_user: str = Depends(get_current_user)) -> list[dict]:
     """
     Return all pairwise net balances for the tab from the pairwise_balances view,
     with display names joined. The mobile filters to the current user's rows.
@@ -164,7 +165,7 @@ def get_balances(tab_id: str, x_user_id: str = Header(...)) -> list[dict]:
       net_balance < 0 → user_b owes user_a
     """
     sb = get_supabase()
-    _assert_member(sb, tab_id, x_user_id)
+    _assert_member(sb, tab_id, current_user)
 
     balances_res = (
         sb.table("pairwise_balances")

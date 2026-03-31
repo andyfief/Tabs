@@ -1,7 +1,8 @@
 from datetime import datetime, timezone
-from fastapi import APIRouter, Header, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from models.tab import TabCreate
 from services.supabase import get_supabase
+from services.auth import get_current_user
 
 router = APIRouter(prefix="/tabs", tags=["tabs"])
 
@@ -32,14 +33,14 @@ def _fetch_tabs_for_ids(sb, tab_ids: list[str]) -> list[dict]:
 
 
 @router.get("/cleared")
-def list_cleared_tabs(x_user_id: str = Header(...)) -> list[dict]:
+def list_cleared_tabs(current_user: str = Depends(get_current_user)) -> list[dict]:
     """Return open tabs the current user has cleared from their homescreen."""
     sb = get_supabase()
 
     memberships = (
         sb.table("tab_members")
         .select("tab_id")
-        .eq("user_id", x_user_id)
+        .eq("user_id", current_user)
         .not_.is_("cleared_at", "null")
         .execute()
     )
@@ -48,14 +49,14 @@ def list_cleared_tabs(x_user_id: str = Header(...)) -> list[dict]:
 
 
 @router.get("")
-def list_tabs(x_user_id: str = Header(...)) -> list[dict]:
+def list_tabs(current_user: str = Depends(get_current_user)) -> list[dict]:
     """Return open tabs the current user is a member of and has not cleared."""
     sb = get_supabase()
 
     memberships = (
         sb.table("tab_members")
         .select("tab_id")
-        .eq("user_id", x_user_id)
+        .eq("user_id", current_user)
         .is_("cleared_at", "null")
         .execute()
     )
@@ -64,24 +65,24 @@ def list_tabs(x_user_id: str = Header(...)) -> list[dict]:
 
 
 @router.post("", status_code=201)
-def create_tab(body: TabCreate, x_user_id: str = Header(...)) -> dict:
+def create_tab(body: TabCreate, current_user: str = Depends(get_current_user)) -> dict:
     """Create a new tab and add the creator as the first member."""
     sb = get_supabase()
 
     tab_res = (
         sb.table("tabs")
-        .insert({"name": body.name, "description": body.description, "created_by": x_user_id})
+        .insert({"name": body.name, "description": body.description, "created_by": current_user})
         .execute()
     )
     tab = tab_res.data[0]
 
-    sb.table("tab_members").insert({"tab_id": tab["id"], "user_id": x_user_id}).execute()
+    sb.table("tab_members").insert({"tab_id": tab["id"], "user_id": current_user}).execute()
 
     return {"id": tab["id"]}
 
 
 @router.patch("/{tab_id}/clear")
-def toggle_clear_tab(tab_id: str, x_user_id: str = Header(...)) -> dict:
+def toggle_clear_tab(tab_id: str, current_user: str = Depends(get_current_user)) -> dict:
     """Toggle cleared_at for the current user on a tab. Personal — does not affect other members."""
     sb = get_supabase()
 
@@ -89,7 +90,7 @@ def toggle_clear_tab(tab_id: str, x_user_id: str = Header(...)) -> dict:
         sb.table("tab_members")
         .select("cleared_at")
         .eq("tab_id", tab_id)
-        .eq("user_id", x_user_id)
+        .eq("user_id", current_user)
         .execute()
     )
     if not member_res.data:
@@ -99,13 +100,13 @@ def toggle_clear_tab(tab_id: str, x_user_id: str = Header(...)) -> dict:
     new_value = None if currently_cleared else datetime.now(timezone.utc).isoformat()
 
     sb.table("tab_members").update({"cleared_at": new_value}) \
-        .eq("tab_id", tab_id).eq("user_id", x_user_id).execute()
+        .eq("tab_id", tab_id).eq("user_id", current_user).execute()
 
     return {"cleared": not currently_cleared}
 
 
 @router.get("/{tab_id}")
-def get_tab(tab_id: str, x_user_id: str = Header(...)) -> dict:
+def get_tab(tab_id: str, current_user: str = Depends(get_current_user)) -> dict:
     """Return tab details and member list. Only accessible to tab members."""
     sb = get_supabase()
 
@@ -113,7 +114,7 @@ def get_tab(tab_id: str, x_user_id: str = Header(...)) -> dict:
         sb.table("tab_members")
         .select("user_id")
         .eq("tab_id", tab_id)
-        .eq("user_id", x_user_id)
+        .eq("user_id", current_user)
         .execute()
     )
     if not membership.data:
