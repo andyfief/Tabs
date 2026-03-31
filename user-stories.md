@@ -13,6 +13,7 @@
 - As a tab member, I want to invite other users to my tab so that we can all log and split expenses together.
 - As a user, I want to join a tab via an invite so that I can participate in expense tracking for an event.
 - As a tab member, I want to view all members of a tab so that I know who is part of the group.
+- As a tab member, I want to see the members that are in my tab.
 
 ## Logging Expenses
 
@@ -26,7 +27,7 @@
 ## Real-Time Balances
 
 - As a tab member, I want balances to update in real time as expenses are added so that I always see the current state of the tab.
-- As a tab member, I want to see each person's net balance within a tab so that it is clear who owes what to whom.
+- As a tab member, I want to see each person's net balance against me so I know who owes me and who I owe.
 - As a tab member, I only want to track remaining/differences in balances, such that I only ever owe one person one amount.
 
 ## Home Screen
@@ -35,6 +36,9 @@
 - As a user, I want to see exactly what I owe and to whom across all tabs so that I know my total outstanding obligations.
 - As a user, I want to see what others owe me across all tabs so that I can track incoming payments.
 - As a user, I want to mark a payment as paid using a checkbox so that balances reflect settled amounts.
+- As a user, I want to be able to clear a tab from my homescreen, like a windows recycling bin.
+- As a user, I want my previous (cleared) tabs to reflect their dates and have their expense history remain for proper auditing.
+- As a user, I want to be able to re-add an unclosed tab to my homescreen.
 
 ## Checkboxes
 - As a user, when I check off a balance that I owe somebody, I no longer recieve any notifications from that tab.
@@ -51,6 +55,7 @@
 - As a user, I want to be informed that closing a tab requires a purchase so that I understand the paywall before proceeding.
 - As a user, I want the option to make a one-time purchase to close a tab so that I am not locked into a subscription.
 - As a user, I want the option to subscribe so that I can close tabs repeatedly without additional one-time fees.
+- As a user, when I close a tab, I want that tab to remain on people's homescreens, including my own - and not get sent to the recycle-bin style clear.
 
 ## Payments & Notifications on Close
 
