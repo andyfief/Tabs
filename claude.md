@@ -83,7 +83,7 @@ EXPO_PROJECT_ID                 # Set after expo init
 ### Payment Deep Links
 - All link construction lives in one backend utility: `generate_payment_link(platform, handle, amount)`
 - Strip `@` and `$` prefixes from user-supplied handles before building URLs
-- Venmo: `venmo://paycharge?txn=pay&recipients=HANDLE&amount=AMOUNT&note=Tabs`
+- Venmo: `https://venmo.com/{username}/pay?amount={amount}&note={Note}`
 - Cash App: `https://cash.app/$HANDLE/AMOUNT`
 - These schemas are unofficial — isolate them so they're easy to update
 
