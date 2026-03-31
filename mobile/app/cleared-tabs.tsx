@@ -11,6 +11,10 @@ import { Swipeable } from 'react-native-gesture-handler';
 import { useRouter } from 'expo-router';
 import { apiFetch } from '../utils/api';
 
+const DARK_BG = '#1c1c1e';
+const DARK_CARD = '#2c2c2e';
+const DARK_BORDER = '#3a3a3c';
+
 type ClearedTab = {
   id: string;
   name: string;
@@ -76,7 +80,6 @@ export default function ClearedTabsScreen() {
   }, [fetchCleared]);
 
   const handleRestore = useCallback(async (tabId: string) => {
-    // Optimistic: remove from cleared list immediately
     setTabs((prev) => prev.filter((t) => t.id !== tabId));
     try {
       await apiFetch(`/tabs/${tabId}/clear`, { method: 'PATCH' });
@@ -86,7 +89,7 @@ export default function ClearedTabsScreen() {
   }, [fetchCleared]);
 
   if (loading) {
-    return <View style={styles.center}><ActivityIndicator /></View>;
+    return <View style={styles.center}><ActivityIndicator color="#fff" /></View>;
   }
 
   if (error) {
@@ -121,7 +124,7 @@ export default function ClearedTabsScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#fff' },
+  container: { flex: 1, backgroundColor: DARK_BG },
   center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   emptyContainer: { flex: 1 },
 
@@ -131,22 +134,22 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     padding: 16,
     borderBottomWidth: StyleSheet.hairlineWidth,
-    borderColor: '#ddd',
-    backgroundColor: '#fff',
+    borderColor: DARK_BORDER,
+    backgroundColor: DARK_CARD,
   },
   rowLeft: { flex: 1, marginRight: 12 },
-  tabName: { fontSize: 16, fontWeight: '600' },
-  meta: { fontSize: 13, color: '#888', marginTop: 2 },
-  date: { fontSize: 12, color: '#aaa' },
+  tabName: { fontSize: 16, fontWeight: '600', color: '#fff' },
+  meta: { fontSize: 13, color: '#8e8e93', marginTop: 2 },
+  date: { fontSize: 12, color: '#8e8e93' },
 
   swipeRestore: {
-    backgroundColor: '#27ae60',
+    backgroundColor: '#30d158',
     justifyContent: 'center',
     alignItems: 'center',
     width: 90,
   },
   swipeLabel: { color: '#fff', fontWeight: '600', fontSize: 14 },
 
-  empty: { color: '#999', fontSize: 15 },
-  error: { color: 'red', fontSize: 14, textAlign: 'center', padding: 16 },
+  empty: { color: '#8e8e93', fontSize: 15 },
+  error: { color: '#ff453a', fontSize: 14, textAlign: 'center', padding: 16 },
 });

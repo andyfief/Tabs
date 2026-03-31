@@ -89,14 +89,21 @@ export default function RootLayout() {
   return (
     <AuthContext.Provider value={{ markProfileReady: () => setAuthState('ready') }}>
     <GestureHandlerRootView style={{ flex: 1 }}>
-      <Stack>
+      <Stack
+        screenOptions={{
+          headerStyle: { backgroundColor: '#1c1c1e' },
+          headerTintColor: '#fff',
+          headerTitleStyle: { color: '#fff' },
+          contentStyle: { backgroundColor: '#1c1c1e' },
+        }}
+      >
         {/* Auth screens — no header */}
         <Stack.Screen name="phone" options={{ headerShown: false }} />
         <Stack.Screen name="verify" options={{ headerShown: false }} />
         <Stack.Screen name="profile-setup" options={{ headerShown: false }} />
 
         {/* App screens */}
-        <Stack.Screen name="index" options={{ title: 'My Tabs' }} />
+        <Stack.Screen name="index" options={{ title: 'My Tabs', headerBackVisible: false, gestureEnabled: false, headerTitleAlign: 'center' }} />
         <Stack.Screen name="create-tab" options={{ title: 'New Tab' }} />
         <Stack.Screen name="join" options={{ title: 'Join a Tab' }} />
         <Stack.Screen name="cleared-tabs" options={{ title: 'Cleared Tabs' }} />

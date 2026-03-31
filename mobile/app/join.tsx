@@ -12,6 +12,9 @@ import {
 import { useRouter } from 'expo-router';
 import { apiFetch } from '../utils/api';
 
+const DARK_BG = '#1c1c1e';
+const DARK_BORDER = '#3a3a3c';
+
 type JoinResponse = { tab_id: string; tab_name: string };
 
 export default function JoinScreen() {
@@ -54,6 +57,7 @@ export default function JoinScreen() {
         <TextInput
           style={styles.input}
           placeholder="XXXXXX"
+          placeholderTextColor="#555"
           value={code}
           onChangeText={(t) => setCode(t.toUpperCase())}
           autoCapitalize="characters"
@@ -72,17 +76,17 @@ export default function JoinScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#fff' },
+  container: { flex: 1, backgroundColor: DARK_BG },
   inner: { flex: 1, justifyContent: 'center', padding: 28 },
-  title: { fontSize: 26, fontWeight: '700', marginBottom: 8 },
-  subtitle: { fontSize: 15, color: '#666', marginBottom: 32 },
+  title: { fontSize: 26, fontWeight: '700', marginBottom: 8, color: '#fff' },
+  subtitle: { fontSize: 15, color: '#8e8e93', marginBottom: 32 },
   input: {
-    borderWidth: 1, borderColor: '#ccc', borderRadius: 6,
-    padding: 14, fontSize: 22, letterSpacing: 8, textAlign: 'center',
+    borderWidth: 1, borderColor: DARK_BORDER, borderRadius: 6,
+    padding: 14, fontSize: 22, letterSpacing: 8, textAlign: 'center', color: '#fff',
   },
-  error: { color: 'red', fontSize: 13, marginTop: 12 },
+  error: { color: '#ff453a', fontSize: 13, marginTop: 12 },
   btn: {
-    marginTop: 24, padding: 14, backgroundColor: '#000',
+    marginTop: 24, padding: 14, backgroundColor: DARK_BORDER,
     borderRadius: 8, alignItems: 'center',
   },
   btnLabel: { color: '#fff', fontWeight: '600', fontSize: 15 },

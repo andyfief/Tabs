@@ -2,15 +2,21 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   FlatList,
+  Modal,
   Pressable,
   StyleSheet,
   Text,
+  TouchableWithoutFeedback,
   View,
 } from 'react-native';
 import { Swipeable } from 'react-native-gesture-handler';
 import { useFocusEffect, useNavigation, useRouter } from 'expo-router';
 import { apiFetch } from '../utils/api';
 import { supabase } from '../utils/supabase';
+
+const DARK_BG = '#1c1c1e';
+const DARK_CARD = '#2c2c2e';
+const DARK_BORDER = '#3a3a3c';
 
 type Tab = {
   id: string;
@@ -49,6 +55,7 @@ export default function HomeScreen() {
   const [tabs, setTabs] = useState<Tab[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [menuOpen, setMenuOpen] = useState(false);
   const initialized = useRef(false);
 
   const fetchTabs = useCallback(async () => {
@@ -76,19 +83,18 @@ export default function HomeScreen() {
 
   useEffect(() => {
     navigation.setOptions({
-      headerRight: () => (
-        <View style={styles.headerRight}>
-          <Pressable style={styles.headerBtn} onPress={() => router.push('/join')}>
-            <Text style={styles.headerBtnLabel}>Join</Text>
+      headerLeft: () =>
+        process.env.EXPO_PUBLIC_SKIP_AUTH !== 'true' ? (
+          <Pressable style={styles.headerMenuBtn} onPress={() => setMenuOpen(true)}>
+            <Text style={styles.headerMenuCaret}>∨</Text>
           </Pressable>
-          <Pressable style={styles.headerBtn} onPress={() => router.push('/cleared-tabs')}>
-            <Text style={styles.headerBtnLabel}>Cleared</Text>
+        ) : null,
+      headerTitle: () => (
+        <View style={styles.headerTitleRow}>
+          <Text style={styles.headerTitleText}>My Tabs</Text>
+          <Pressable style={styles.clearedBtn} onPress={() => router.push('/cleared-tabs')}>
+            <Text style={styles.clearedBtnLabel}>Cleared</Text>
           </Pressable>
-          {process.env.EXPO_PUBLIC_SKIP_AUTH !== 'true' && (
-            <Pressable style={styles.headerBtn} onPress={() => supabase.auth.signOut()}>
-              <Text style={[styles.headerBtnLabel, styles.signOutLabel]}>Sign Out</Text>
-            </Pressable>
-          )}
         </View>
       ),
     });
@@ -103,7 +109,7 @@ export default function HomeScreen() {
     }
   }, [fetchTabs]);
 
-  if (loading) return <View style={styles.center}><ActivityIndicator /></View>;
+  if (loading) return <View style={styles.center}><ActivityIndicator color="#fff" /></View>;
 
   if (error) {
     return <View style={styles.center}><Text style={styles.error}>{error}</Text></View>;
@@ -111,6 +117,27 @@ export default function HomeScreen() {
 
   return (
     <View style={styles.container}>
+      {/* Caret dropdown menu */}
+      <Modal visible={menuOpen} transparent animationType="fade">
+        <TouchableWithoutFeedback onPress={() => setMenuOpen(false)}>
+          <View style={styles.menuOverlay}>
+            <TouchableWithoutFeedback>
+              <View style={styles.menuDropdown}>
+                <Pressable
+                  style={styles.menuItem}
+                  onPress={() => {
+                    setMenuOpen(false);
+                    supabase.auth.signOut();
+                  }}
+                >
+                  <Text style={styles.menuItemSignOut}>Sign Out</Text>
+                </Pressable>
+              </View>
+            </TouchableWithoutFeedback>
+          </View>
+        </TouchableWithoutFeedback>
+      </Modal>
+
       <FlatList
         data={tabs}
         keyExtractor={(item) => item.id}
@@ -141,41 +168,76 @@ export default function HomeScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#fff' },
+  container: { flex: 1, backgroundColor: DARK_BG },
   center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   emptyContainer: { flex: 1 },
 
   row: {
     padding: 16,
     borderBottomWidth: StyleSheet.hairlineWidth,
-    borderColor: '#ddd',
-    backgroundColor: '#fff',
+    borderColor: DARK_BORDER,
+    backgroundColor: DARK_CARD,
   },
-  tabName: { fontSize: 16, fontWeight: '600' },
-  memberCount: { fontSize: 13, color: '#666', marginTop: 2 },
+  tabName: { fontSize: 16, fontWeight: '600', color: '#fff' },
+  memberCount: { fontSize: 13, color: '#8e8e93', marginTop: 2 },
 
   swipeClear: {
-    backgroundColor: '#888',
+    backgroundColor: '#555',
     justifyContent: 'center',
     alignItems: 'center',
     width: 80,
   },
   swipeLabel: { color: '#fff', fontWeight: '600', fontSize: 14 },
 
-  headerRight: { flexDirection: 'row', gap: 8, marginRight: 4 },
-  headerBtn: { padding: 6 },
-  headerBtnLabel: { fontSize: 14, color: '#888' },
-  signOutLabel: { color: '#c0392b' },
+  // Header
+  headerMenuBtn: { paddingHorizontal: 12, paddingVertical: 6 },
+  headerMenuCaret: { fontSize: 18, color: '#fff', fontWeight: '600' },
+  headerTitleRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  headerTitleText: { fontSize: 17, fontWeight: '600', color: '#fff' },
+  clearedBtn: {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 6,
+    backgroundColor: DARK_BORDER,
+  },
+  clearedBtnLabel: { fontSize: 13, color: '#8e8e93' },
 
-  bottomRow: { flexDirection: 'row', gap: 10, margin: 16 },
+  // Dropdown menu
+  menuOverlay: { flex: 1 },
+  menuDropdown: {
+    position: 'absolute',
+    top: 90,
+    left: 12,
+    backgroundColor: DARK_CARD,
+    borderRadius: 10,
+    minWidth: 150,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.5,
+    shadowRadius: 8,
+    elevation: 8,
+  },
+  menuItem: { paddingVertical: 14, paddingHorizontal: 16 },
+  menuItemSignOut: { fontSize: 15, color: '#ff453a' },
+
+  bottomRow: {
+    flexDirection: 'row',
+    gap: 10,
+    marginHorizontal: 16,
+    marginBottom: 32,
+    marginTop: 8,
+  },
   fab: {
-    flex: 1, padding: 14, backgroundColor: '#000',
-    borderRadius: 8, alignItems: 'center',
+    flex: 1,
+    padding: 14,
+    backgroundColor: DARK_BORDER,
+    borderRadius: 8,
+    alignItems: 'center',
   },
   fabLabel: { color: '#fff', fontWeight: '600', fontSize: 15 },
-  fabSecondary: { backgroundColor: '#fff', borderWidth: 1, borderColor: '#000' },
-  fabSecondaryLabel: { color: '#000', fontWeight: '600', fontSize: 15 },
+  fabSecondary: { backgroundColor: DARK_CARD, borderWidth: 1, borderColor: '#555' },
+  fabSecondaryLabel: { color: '#fff', fontWeight: '600', fontSize: 15 },
 
-  empty: { color: '#999', fontSize: 15 },
-  error: { color: 'red', fontSize: 14, textAlign: 'center', padding: 16 },
+  empty: { color: '#8e8e93', fontSize: 15 },
+  error: { color: '#ff453a', fontSize: 14, textAlign: 'center', padding: 16 },
 });

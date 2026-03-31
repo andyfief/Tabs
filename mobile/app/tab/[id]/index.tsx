@@ -15,6 +15,10 @@ import { useFocusEffect, useLocalSearchParams, useRouter, useNavigation } from '
 import { apiFetch } from '../../../utils/api';
 import { useSession } from '../../../hooks/useSession';
 
+const DARK_BG = '#1c1c1e';
+const DARK_CARD = '#2c2c2e';
+const DARK_BORDER = '#3a3a3c';
+
 // ─── Types ───────────────────────────────────────────────────
 
 type Member = { user_id: string; display_name: string };
@@ -167,8 +171,8 @@ export default function TabDetailScreen() {
       navigation.setOptions({
         title: tabData.name,
         headerRight: () => (
-          <Pressable onPress={handleShowInvite} style={{ marginRight: 8 }}>
-            <Text style={{ color: '#007AFF', fontSize: 15 }}>Invite</Text>
+          <Pressable onPress={handleShowInvite} style={{ paddingLeft:6, paddingRight:4, paddingVertical: 4}}>
+            <Text style={{ color: '#ffffff', fontSize: 15 }}>Invite</Text>
           </Pressable>
         ),
       });
@@ -229,7 +233,7 @@ export default function TabDetailScreen() {
   // ── Loading / error states ──────────────────────────────────
 
   if (loading) {
-    return <View style={styles.center}><ActivityIndicator /></View>;
+    return <View style={styles.center}><ActivityIndicator color="#fff" /></View>;
   }
 
   if (error || !tab) {
@@ -287,7 +291,7 @@ export default function TabDetailScreen() {
           <FlatList
             data={expenses}
             keyExtractor={(item) => item.id}
-            refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
+            refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#fff" />}
             renderItem={({ item }) => (
               <ExpenseRow item={item} onToggle={handleToggleExpense} />
             )}
@@ -305,7 +309,7 @@ export default function TabDetailScreen() {
         <FlatList
           data={[]}
           keyExtractor={() => ''}
-          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#fff" />}
           ListHeaderComponent={
             myBalances.length === 0 ? (
               <View style={styles.emptyState}>
@@ -352,21 +356,21 @@ export default function TabDetailScreen() {
 // ─── Styles ──────────────────────────────────────────────────
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#fff' },
+  container: { flex: 1, backgroundColor: DARK_BG },
   center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
 
-  header: { padding: 16, borderBottomWidth: StyleSheet.hairlineWidth, borderColor: '#ddd' },
-  tabName: { fontSize: 20, fontWeight: '700' },
-  description: { fontSize: 14, color: '#555', marginTop: 3 },
-  meta: { fontSize: 12, color: '#999', marginTop: 4 },
+  header: { padding: 16, borderBottomWidth: StyleSheet.hairlineWidth, borderColor: DARK_BORDER },
+  tabName: { fontSize: 20, fontWeight: '700', color: '#fff' },
+  description: { fontSize: 14, color: '#8e8e93', marginTop: 3 },
+  meta: { fontSize: 12, color: '#8e8e93', marginTop: 4 },
 
-  toggle: { flexDirection: 'row', borderBottomWidth: StyleSheet.hairlineWidth, borderColor: '#ddd' },
+  toggle: { flexDirection: 'row', borderBottomWidth: StyleSheet.hairlineWidth, borderColor: DARK_BORDER },
   toggleBtn: { flex: 1, paddingVertical: 10, alignItems: 'center' },
-  toggleActive: { borderBottomWidth: 2, borderColor: '#000' },
-  toggleLabel: { fontSize: 14, color: '#999' },
-  toggleLabelActive: { color: '#000', fontWeight: '600' },
+  toggleActive: { borderBottomWidth: 2, borderColor: '#fff' },
+  toggleLabel: { fontSize: 14, color: '#8e8e93' },
+  toggleLabelActive: { color: '#fff', fontWeight: '600' },
 
-  addBtn: { margin: 12, padding: 12, backgroundColor: '#000', borderRadius: 7, alignItems: 'center' },
+  addBtn: { margin: 12, padding: 12, backgroundColor: DARK_BORDER, borderRadius: 7, alignItems: 'center' },
   addBtnLabel: { color: '#fff', fontWeight: '600', fontSize: 14 },
 
   expenseRow: {
@@ -376,15 +380,15 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 12,
     borderBottomWidth: StyleSheet.hairlineWidth,
-    borderColor: '#eee',
-    backgroundColor: '#fff',
+    borderColor: DARK_BORDER,
+    backgroundColor: DARK_CARD,
   },
-  expenseRowRemoved: { backgroundColor: '#fafafa' },
+  expenseRowRemoved: { backgroundColor: '#242426' },
   expenseLeft: { flex: 1, marginRight: 12 },
-  expenseTitle: { fontSize: 15, fontWeight: '500' },
-  expenseMeta: { fontSize: 12, color: '#888', marginTop: 2 },
-  expenseAmount: { fontSize: 15, fontWeight: '600' },
-  textRemoved: { color: '#bbb' },
+  expenseTitle: { fontSize: 15, fontWeight: '500', color: '#fff' },
+  expenseMeta: { fontSize: 12, color: '#8e8e93', marginTop: 2 },
+  expenseAmount: { fontSize: 15, fontWeight: '600', color: '#fff' },
+  textRemoved: { color: '#555' },
 
   swipeAction: {
     justifyContent: 'center',
@@ -392,25 +396,25 @@ const styles = StyleSheet.create({
     width: 90,
   },
   swipeRemove: { backgroundColor: '#c0392b' },
-  swipeRestore: { backgroundColor: '#27ae60' },
+  swipeRestore: { backgroundColor: '#30d158' },
   swipeLabel: { color: '#fff', fontWeight: '600', fontSize: 14 },
 
   balanceSection: {
-    fontSize: 12, fontWeight: '600', color: '#999',
+    fontSize: 12, fontWeight: '600', color: '#8e8e93',
     paddingHorizontal: 16, paddingTop: 16, paddingBottom: 6,
     textTransform: 'uppercase', letterSpacing: 0.5,
   },
   balanceRow: {
     flexDirection: 'row', justifyContent: 'space-between',
     paddingHorizontal: 16, paddingVertical: 12,
-    borderBottomWidth: StyleSheet.hairlineWidth, borderColor: '#eee',
+    borderBottomWidth: StyleSheet.hairlineWidth, borderColor: DARK_BORDER,
   },
-  balanceName: { fontSize: 15 },
+  balanceName: { fontSize: 15, color: '#fff' },
   balanceAmount: { fontSize: 15, fontWeight: '600' },
-  owe: { color: '#c0392b' },
-  owed: { color: '#27ae60' },
+  owe: { color: '#ff453a' },
+  owed: { color: '#30d158' },
 
   emptyState: { padding: 32, alignItems: 'center' },
-  emptyText: { color: '#999', fontSize: 14 },
-  error: { color: 'red', fontSize: 14, textAlign: 'center', padding: 16 },
+  emptyText: { color: '#8e8e93', fontSize: 14 },
+  error: { color: '#ff453a', fontSize: 14, textAlign: 'center', padding: 16 },
 });

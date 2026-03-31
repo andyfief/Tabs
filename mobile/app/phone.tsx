@@ -12,6 +12,9 @@ import {
 import { useRouter } from 'expo-router';
 import { supabase } from '../utils/supabase';
 
+const DARK_BG = '#1c1c1e';
+const DARK_BORDER = '#3a3a3c';
+
 export default function PhoneScreen() {
   const router = useRouter();
   const [number, setNumber] = useState('');
@@ -52,6 +55,7 @@ export default function PhoneScreen() {
           <TextInput
             style={styles.input}
             placeholder="(555) 000-0000"
+            placeholderTextColor="#555"
             value={number}
             onChangeText={setNumber}
             keyboardType="number-pad"
@@ -71,23 +75,23 @@ export default function PhoneScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#fff' },
+  container: { flex: 1, backgroundColor: DARK_BG },
   inner: { flex: 1, justifyContent: 'center', padding: 28 },
-  title: { fontSize: 26, fontWeight: '700', marginBottom: 8 },
-  subtitle: { fontSize: 15, color: '#666', marginBottom: 32 },
+  title: { fontSize: 26, fontWeight: '700', marginBottom: 8, color: '#fff' },
+  subtitle: { fontSize: 15, color: '#8e8e93', marginBottom: 32 },
   inputRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   prefix: {
-    borderWidth: 1, borderColor: '#ccc', borderRadius: 6,
+    borderWidth: 1, borderColor: DARK_BORDER, borderRadius: 6,
     paddingHorizontal: 10, paddingVertical: 11,
   },
-  prefixText: { fontSize: 15 },
+  prefixText: { fontSize: 15, color: '#fff' },
   input: {
-    flex: 1, borderWidth: 1, borderColor: '#ccc',
-    borderRadius: 6, padding: 10, fontSize: 15,
+    flex: 1, borderWidth: 1, borderColor: DARK_BORDER,
+    borderRadius: 6, padding: 10, fontSize: 15, color: '#fff',
   },
-  error: { color: 'red', fontSize: 13, marginTop: 12 },
+  error: { color: '#ff453a', fontSize: 13, marginTop: 12 },
   btn: {
-    marginTop: 24, padding: 14, backgroundColor: '#000',
+    marginTop: 24, padding: 14, backgroundColor: DARK_BORDER,
     borderRadius: 8, alignItems: 'center',
   },
   btnLabel: { color: '#fff', fontWeight: '600', fontSize: 15 },
