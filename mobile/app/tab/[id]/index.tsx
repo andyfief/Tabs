@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -12,7 +12,11 @@ import {
 import * as Clipboard from 'expo-clipboard';
 import { Swipeable } from 'react-native-gesture-handler';
 import { useFocusEffect, useLocalSearchParams, useRouter, useNavigation } from 'expo-router';
+import { useQuery } from '@tanstack/react-query';
 import { apiFetch } from '../../../utils/api';
+import { queryClient, TAB_DETAIL_STALE_TIME } from '../../../utils/queryClient';
+import { fetchTabDetail } from '../../../utils/tabQueries';
+import type { Expense, TabDetailFull } from '../../../utils/tabQueries';
 import { useSession } from '../../../hooks/useSession';
 
 const DARK_BG = '#1c1c1e';
@@ -20,25 +24,6 @@ const DARK_CARD = '#2c2c2e';
 const DARK_BORDER = '#3a3a3c';
 
 // ─── Types ───────────────────────────────────────────────────
-
-type Member = { user_id: string; display_name: string };
-
-type TabDetail = {
-  id: string;
-  name: string;
-  description: string | null;
-  status: 'open' | 'closed';
-  members: Member[];
-};
-
-type Expense = {
-  id: string;
-  title: string;
-  amount: number;
-  payer_name: string;
-  created_at: string;
-  removed_at: string | null;
-};
 
 type Balance = {
   user_a_id: string;
@@ -132,16 +117,17 @@ export default function TabDetailScreen() {
   const router = useRouter();
   const navigation = useNavigation();
   const { userId } = useSession();
-
-  const [tab, setTab] = useState<TabDetail | null>(null);
-  const [expenses, setExpenses] = useState<Expense[]>([]);
-  const [balances, setBalances] = useState<Balance[]>([]);
   const [panel, setPanel] = useState<Panel>('expenses');
-  const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const initialized = useRef(false);
 
+  const { data, isLoading, isFetching, refetch, error } = useQuery({
+    queryKey: ['tab', id],
+    queryFn: () => fetchTabDetail(id!),
+    staleTime: TAB_DETAIL_STALE_TIME,
+    enabled: !!id,
+  });
+
+  // Update header once tab name is available from cache or fresh fetch.
   const handleShowInvite = useCallback(async () => {
     try {
       const { code } = await apiFetch<{ code: string; tab_name: string }>(`/tabs/${id}/invite`);
@@ -158,92 +144,84 @@ export default function TabDetailScreen() {
     }
   }, [id]);
 
-  const fetchAll = useCallback(async () => {
-    try {
-      const [tabData, expenseData, balanceData] = await Promise.all([
-        apiFetch<TabDetail>(`/tabs/${id}`),
-        apiFetch<Expense[]>(`/tabs/${id}/expenses`),
-        apiFetch<Balance[]>(`/tabs/${id}/expenses/balances`),
-      ]);
-      setTab(tabData);
-      setExpenses(expenseData);
-      setBalances(balanceData);
-      navigation.setOptions({
-        title: tabData.name,
-        headerRight: () => (
-          <Pressable onPress={handleShowInvite} style={{ paddingLeft:6, paddingRight:4, paddingVertical: 4}}>
-            <Text style={{ color: '#ffffff', fontSize: 15 }}>Invite</Text>
-          </Pressable>
-        ),
-      });
-    } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : 'Failed to load tab.');
-    }
-  }, [id, navigation]);
-
   useEffect(() => {
-    fetchAll().finally(() => {
-      setLoading(false);
-      initialized.current = true;
+    if (!data?.tab) return;
+    navigation.setOptions({
+      title: data.tab.name,
+      headerRight: () => (
+        <Pressable onPress={handleShowInvite} style={{ paddingLeft: 6, paddingRight: 4, paddingVertical: 4 }}>
+          <Text style={{ color: '#ffffff', fontSize: 15 }}>Invite</Text>
+        </Pressable>
+      ),
     });
-  }, [fetchAll]);
+  }, [data?.tab.name, navigation, handleShowInvite]);
 
+  // Clear the pull-to-refresh spinner once the in-flight fetch settles.
+  useEffect(() => {
+    if (!isFetching) setRefreshing(false);
+  }, [isFetching]);
+
+  // Refetch on every focus so data stays current after adding expenses.
+  // React Query deduplicates if a fetch is already in flight.
   useFocusEffect(
     useCallback(() => {
-      if (!initialized.current) return;
-      setRefreshing(true);
-      fetchAll().finally(() => setRefreshing(false));
-    }, [fetchAll])
+      refetch();
+    }, [refetch])
   );
 
   const onRefresh = useCallback(() => {
     setRefreshing(true);
-    fetchAll().finally(() => setRefreshing(false));
-  }, [fetchAll]);
+    refetch();
+  }, [refetch]);
 
-  // Optimistic toggle: flip removed_at locally, then persist, then refetch balances
+  // Optimistic toggle: update the cache immediately, then sync from the server.
   const handleToggleExpense = useCallback(async (expenseId: string) => {
     const now = new Date().toISOString();
 
-    setExpenses((prev) => {
-      const toggled = prev.map((e) =>
+    queryClient.setQueryData<TabDetailFull>(['tab', id], (old) => {
+      if (!old) return old;
+      const toggled = old.expenses.map((e) =>
         e.id === expenseId
           ? { ...e, removed_at: e.removed_at === null ? now : null }
           : e
       );
-      // Re-sort: active first by created_at desc, removed last by removed_at desc
-      const active = toggled.filter((e) => e.removed_at === null)
+      const active = toggled
+        .filter((e) => e.removed_at === null)
         .sort((a, b) => b.created_at.localeCompare(a.created_at));
-      const removed = toggled.filter((e) => e.removed_at !== null)
+      const removed = toggled
+        .filter((e) => e.removed_at !== null)
         .sort((a, b) => b.removed_at!.localeCompare(a.removed_at!));
-      return [...active, ...removed];
+      return { ...old, expenses: [...active, ...removed] };
     });
 
     try {
       await apiFetch(`/tabs/${id}/expenses/${expenseId}`, { method: 'PATCH' });
-      // Refetch balances so My Balances panel stays in sync
-      const balanceData = await apiFetch<Balance[]>(`/tabs/${id}/expenses/balances`);
-      setBalances(balanceData);
-    } catch (e: unknown) {
-      // Revert optimistic update on failure
-      fetchAll();
+      // Invalidate to pull fresh balances from the pairwise_balances view.
+      queryClient.invalidateQueries({ queryKey: ['tab', id] });
+    } catch {
+      // Revert optimistic update by fetching the source of truth.
+      queryClient.invalidateQueries({ queryKey: ['tab', id] });
     }
-  }, [id, fetchAll]);
+  }, [id]);
 
   // ── Loading / error states ──────────────────────────────────
+  // Only show a full-screen spinner on the very first load (no cached data).
 
-  if (loading) {
+  if (isLoading) {
     return <View style={styles.center}><ActivityIndicator color="#fff" /></View>;
   }
 
-  if (error || !tab) {
+  if (error || !data?.tab) {
     return (
       <View style={styles.center}>
-        <Text style={styles.error}>{error ?? 'Tab not found.'}</Text>
+        <Text style={styles.error}>
+          {error instanceof Error ? error.message : 'Tab not found.'}
+        </Text>
       </View>
     );
   }
 
+  const { tab, expenses, balances } = data;
   const myBalances = toMyBalances(balances, userId ?? '');
   const iOwe = myBalances.filter((b) => b.i_owe);
   const owedToMe = myBalances.filter((b) => !b.i_owe);
