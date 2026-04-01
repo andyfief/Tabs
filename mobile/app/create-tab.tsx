@@ -51,7 +51,6 @@ export default function CreateTabScreen() {
         placeholderTextColor="#555"
         value={name}
         onChangeText={setName}
-        autoFocus
       />
 
       <Text style={styles.label}>Description</Text>

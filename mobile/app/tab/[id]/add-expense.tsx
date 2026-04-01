@@ -11,7 +11,7 @@ import {
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useQuery } from '@tanstack/react-query';
 import { apiFetch } from '../../../utils/api';
-import { queryClient, TAB_DETAIL_STALE_TIME } from '../../../utils/queryClient';
+import { queryClient } from '../../../utils/queryClient';
 import { fetchTabDetail } from '../../../utils/tabQueries';
 import type { Member } from '../../../utils/tabQueries';
 import { HARDCODED_USER_ID } from '../../../utils/constants';
@@ -28,7 +28,6 @@ export default function AddExpenseScreen() {
   const { data, isLoading } = useQuery({
     queryKey: ['tab', tabId],
     queryFn: () => fetchTabDetail(tabId!),
-    staleTime: TAB_DETAIL_STALE_TIME,
     enabled: !!tabId,
   });
 

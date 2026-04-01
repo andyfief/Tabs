@@ -72,6 +72,7 @@ export default function ClearedTabsScreen() {
     try {
       await apiFetch(`/tabs/${tabId}/clear`, { method: 'PATCH' });
     } catch {
+      console.log("catch")
       queryClient.setQueryData<Tab[]>(['tabs'], (prev = []) =>
         prev.map((t) => t.id === tabId ? { ...t, is_cleared: true } : t)
       );
