@@ -12,7 +12,7 @@ import {
 } from 'react-native';
 import type { ViewToken } from 'react-native';
 import { Swipeable } from 'react-native-gesture-handler';
-import { useNavigation, useRouter } from 'expo-router';
+import { useFocusEffect, useNavigation, useRouter } from 'expo-router';
 import { useQuery } from '@tanstack/react-query';
 import { apiFetch } from '../utils/api';
 import { supabase } from '../utils/supabase';
@@ -65,10 +65,9 @@ function TabRow({ item, onPress, onClear }: TabRowProps) {
 type NewTabDraftRowProps = {
   onSubmit: (name: string) => void;
   onCancel: () => void;
-  submitting: boolean;
 };
 
-function NewTabDraftRow({ onSubmit, onCancel, submitting }: NewTabDraftRowProps) {
+function NewTabDraftRow({ onSubmit, onCancel }: NewTabDraftRowProps) {
   const [name, setName] = useState('');
   const didSubmit = useRef(false);
 
@@ -89,21 +88,17 @@ function NewTabDraftRow({ onSubmit, onCancel, submitting }: NewTabDraftRowProps)
 
   return (
     <View style={[styles.row, styles.draftRow]}>
-      {submitting ? (
-        <ActivityIndicator color="#fff" size="small" style={styles.draftSpinner} />
-      ) : (
-        <TextInput
-          style={styles.draftInput}
-          placeholder="Tab name"
-          placeholderTextColor="#555"
-          value={name}
-          onChangeText={setName}
-          onSubmitEditing={handleSubmit}
-          onBlur={handleBlur}
-          autoFocus
-          returnKeyType="done"
-        />
-      )}
+      <TextInput
+        style={styles.draftInput}
+        placeholder="Tab name"
+        placeholderTextColor="#555"
+        value={name}
+        onChangeText={setName}
+        onSubmitEditing={handleSubmit}
+        onBlur={handleBlur}
+        autoFocus
+        returnKeyType="done"
+      />
       <AvatarCircles count={1} />
     </View>
   );
@@ -114,12 +109,20 @@ export default function HomeScreen() {
   const navigation = useNavigation();
   const [menuOpen, setMenuOpen] = useState(false);
   const [creatingNew, setCreatingNew] = useState(false);
-  const [draftSubmitting, setDraftSubmitting] = useState(false);
 
   const { data: allTabs = [], isLoading, error } = useQuery({
     queryKey: ['tabs'],
     queryFn: fetchAllTabs,
+    staleTime: 30_000,
   });
+
+  // On return to this screen, revalidate only if the cached list is actually stale.
+  // This is a no-op when we just seeded the cache via setQueryData (data is fresh).
+  useFocusEffect(
+    useCallback(() => {
+      queryClient.refetchQueries({ queryKey: ['tabs'], type: 'active', stale: true });
+    }, [])
+  );
 
   const tabs = allTabs.filter((t) => !t.is_cleared);
 
@@ -135,10 +138,11 @@ export default function HomeScreen() {
         if (index === null) return;
         for (let i = index; i <= Math.min(index + 3, list.length - 1); i++) {
           const tab = list[i];
-          if (tab) {
+          if (tab && !tab.id.startsWith('temp-')) {
             queryClient.prefetchQuery({
               queryKey: ['tab', tab.id],
               queryFn: () => fetchTabDetail(tab.id),
+              staleTime: 30_000,
             });
           }
         }
@@ -184,17 +188,45 @@ export default function HomeScreen() {
   }, []);
 
   async function handleCreateTab(name: string) {
-    setDraftSubmitting(true);
+    const tempId = `temp-${Date.now()}`;
+
+    // Seed the tabs list so the row appears immediately
+    queryClient.setQueryData<Tab[]>(['tabs'], (prev = []) => [
+      ...prev,
+      { id: tempId, name, description: null, member_count: 1, created_at: new Date().toISOString(), is_cleared: false },
+    ]);
+
+    // Seed the tab detail so the screen opens with no spinner
+    queryClient.setQueryData(['tab', tempId], {
+      tab: { id: tempId, name, description: null, status: 'open', members: [], links_unlocked: false },
+      expenses: [],
+      balances: [],
+      settlements: [],
+    });
+
+    setCreatingNew(false);
+    router.push(`/tab/${tempId}`);
+
     try {
-      const tab = await apiFetch<{ id: string }>('/tabs', {
+      const created = await apiFetch<{ id: string; created_at: string }>('/tabs', {
         method: 'POST',
         body: JSON.stringify({ name }),
       });
-      setCreatingNew(false);
-      setDraftSubmitting(false);
-      router.push(`/tab/${tab.id}`);
+
+      // Seed real-ID cache before signalling the tab screen
+      queryClient.setQueryData(['tab', created.id], queryClient.getQueryData(['tab', tempId]));
+
+      queryClient.setQueryData<Tab[]>(['tabs'], (prev = []) =>
+        prev.map((t) => t.id === tempId ? { ...t, id: created.id, created_at: created.created_at } : t)
+      );
+
+      // Signal the tab screen to silently swap its ID param (no navigation animation)
+      queryClient.setQueryData(['tab-resolve', tempId], created.id);
     } catch {
-      setDraftSubmitting(false);
+      // Rollback optimistic entries and return home
+      queryClient.setQueryData<Tab[]>(['tabs'], (prev = []) => prev.filter((t) => t.id !== tempId));
+      queryClient.removeQueries({ queryKey: ['tab', tempId] });
+      router.back();
     }
   }
 
@@ -243,7 +275,6 @@ export default function HomeScreen() {
             <NewTabDraftRow
               onSubmit={handleCreateTab}
               onCancel={() => setCreatingNew(false)}
-              submitting={draftSubmitting}
             />
           ) : null
         }
@@ -262,7 +293,7 @@ export default function HomeScreen() {
         </Pressable>
         <Pressable
           style={styles.fab}
-          onPress={() => { setCreatingNew(true); setDraftSubmitting(false); }}
+          onPress={() => setCreatingNew(true)}
           disabled={creatingNew}
         >
           <Text style={styles.fabLabel}>+ New Tab</Text>
@@ -305,8 +336,6 @@ const styles = StyleSheet.create({
     padding: 0,
     marginBottom: 8,
   },
-  draftSpinner: { marginBottom: 8, alignSelf: 'flex-start' },
-
   swipeClear: {
     backgroundColor: '#555',
     justifyContent: 'center',

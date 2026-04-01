@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -202,11 +202,33 @@ export default function TabDetailScreen() {
   const [panel, setPanel] = useState<Panel>('expenses');
   const [refreshing, setRefreshing] = useState(false);
 
+  // Don't hit the network for optimistic temp tabs — reads from seeded cache only.
+  const isTemp = id?.startsWith('temp-') ?? false;
+
   const { data, isLoading, isFetching, refetch, error } = useQuery({
     queryKey: ['tab', id],
     queryFn: () => fetchTabDetail(id!),
-    enabled: !!id,
+    enabled: !!id && !isTemp,
+    staleTime: 30_000,
   });
+
+  // Watch for the POST to resolve the temp ID, then silently swap the route param in-place.
+  // router.setParams updates the URL without triggering a navigation animation.
+  useEffect(() => {
+    if (!isTemp || !id) return;
+
+    const apply = (realId: string) => {
+      router.setParams({ id: realId });
+    };
+
+    const existing = queryClient.getQueryData<string>(['tab-resolve', id]);
+    if (existing) { apply(existing); return; }
+
+    return queryClient.getQueryCache().subscribe(() => {
+      const realId = queryClient.getQueryData<string>(['tab-resolve', id]);
+      if (realId) apply(realId);
+    });
+  }, [id, isTemp, router]);
 
   // links_unlocked is one-way: once true from the server it stays true.
   // Local state lets us optimistically flip it without a full refetch.
@@ -248,9 +270,15 @@ export default function TabDetailScreen() {
     if (!isFetching) setRefreshing(false);
   }, [isFetching]);
 
+  // isTempRef lets the callback read the current value without being in the dep array.
+  // If isTemp were a dep, re-registering the callback when it flips false would cause
+  // an immediate re-fire on the already-focused screen, doubling the fetch.
+  const isTempRef = useRef(isTemp);
+  isTempRef.current = isTemp;
+
   useFocusEffect(
     useCallback(() => {
-      refetch();
+      if (!isTempRef.current) refetch();
     }, [refetch])
   );
 
