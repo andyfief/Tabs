@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback } from 'react';
 import {
   ActivityIndicator,
   FlatList,
@@ -9,19 +9,14 @@ import {
 } from 'react-native';
 import { Swipeable } from 'react-native-gesture-handler';
 import { useRouter } from 'expo-router';
+import { useQuery } from '@tanstack/react-query';
 import { apiFetch } from '../utils/api';
+import { queryClient } from '../utils/queryClient';
+import { Tab, fetchAllTabs } from '../utils/tabQueries';
 
 const DARK_BG = '#1c1c1e';
 const DARK_CARD = '#2c2c2e';
 const DARK_BORDER = '#3a3a3c';
-
-type ClearedTab = {
-  id: string;
-  name: string;
-  description: string | null;
-  member_count: number;
-  created_at: string;
-};
 
 function formatDate(iso: string): string {
   return new Date(iso).toLocaleDateString(undefined, {
@@ -32,7 +27,7 @@ function formatDate(iso: string): string {
 }
 
 type TabRowProps = {
-  item: ClearedTab;
+  item: Tab;
   onPress: () => void;
   onRestore: (id: string) => void;
 };
@@ -62,40 +57,35 @@ function ClearedTabRow({ item, onPress, onRestore }: TabRowProps) {
 
 export default function ClearedTabsScreen() {
   const router = useRouter();
-  const [tabs, setTabs] = useState<ClearedTab[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
 
-  const fetchCleared = useCallback(async () => {
-    try {
-      const data = await apiFetch<ClearedTab[]>('/tabs/cleared');
-      setTabs(data);
-    } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : 'Failed to load cleared tabs.');
-    }
-  }, []);
+  const { data: allTabs = [], isLoading, error } = useQuery({
+    queryKey: ['tabs'],
+    queryFn: fetchAllTabs,
+  });
 
-  useEffect(() => {
-    fetchCleared().finally(() => setLoading(false));
-  }, [fetchCleared]);
+  const tabs = allTabs.filter((t) => t.is_cleared);
 
   const handleRestore = useCallback(async (tabId: string) => {
-    setTabs((prev) => prev.filter((t) => t.id !== tabId));
+    queryClient.setQueryData<Tab[]>(['tabs'], (prev = []) =>
+      prev.map((t) => t.id === tabId ? { ...t, is_cleared: false } : t)
+    );
     try {
       await apiFetch(`/tabs/${tabId}/clear`, { method: 'PATCH' });
     } catch {
-      fetchCleared();
+      queryClient.setQueryData<Tab[]>(['tabs'], (prev = []) =>
+        prev.map((t) => t.id === tabId ? { ...t, is_cleared: true } : t)
+      );
     }
-  }, [fetchCleared]);
+  }, []);
 
-  if (loading) {
+  if (isLoading) {
     return <View style={styles.center}><ActivityIndicator color="#fff" /></View>;
   }
 
   if (error) {
     return (
       <View style={styles.center}>
-        <Text style={styles.error}>{error}</Text>
+        <Text style={styles.error}>{(error as Error).message}</Text>
       </View>
     );
   }

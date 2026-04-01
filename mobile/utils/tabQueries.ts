@@ -58,7 +58,22 @@ export type TabDetailFull = {
   settlements: BalanceSettlement[];
 };
 
-// ─── Query function ───────────────────────────────────────────
+// ─── Tab list types & query functions ────────────────────────
+
+export type Tab = {
+  id: string;
+  name: string;
+  description: string | null;
+  member_count: number;
+  created_at: string;
+  is_cleared: boolean;
+};
+
+export async function fetchAllTabs(): Promise<Tab[]> {
+  return apiFetch<Tab[]>('/tabs/all');
+}
+
+// ─── Tab detail query function ────────────────────────────────
 
 /** Single call that fetches everything the Tab detail screen needs. */
 export async function fetchTabDetail(tabId: string): Promise<TabDetailFull> {
