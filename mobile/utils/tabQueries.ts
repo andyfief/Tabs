@@ -41,6 +41,8 @@ export type Balance = {
 // restored_at set   → user restored it; shown as a separate active row.
 export type BalanceSettlement = {
   id: string;
+  initiator_id: string;
+  initiator_name: string;
   counterpart_id: string;
   counterpart_name: string;
   amount: number;
