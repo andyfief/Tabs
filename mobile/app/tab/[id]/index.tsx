@@ -180,7 +180,7 @@ function SettledRow({ item, onRestore }: SettledRowProps) {
       <View style={[styles.balanceRow, styles.balanceRowSettled]}>
         <View style={styles.balanceLeft}>
           <Text style={[styles.balanceName, styles.textSettled]}>{item.counterpart_name}</Text>
-          <Text style={styles.settledMeta}>Settled {formatDate(item.settled_at)}</Text>
+          <Text style={styles.settledMeta}>Settled by {item.initiator_name}</Text>
         </View>
         <Text style={[styles.balanceAmount, styles.textSettled]}>
           {item.i_owe ? '−' : '+'}${item.amount.toFixed(2)}
@@ -319,8 +319,12 @@ export default function TabDetailScreen() {
 
     // Optimistically add settlement to cache.
     const tempId = `temp-${Date.now()}`;
+    const members = data?.tab.members ?? [];
+    const myName = members.find((m) => m.user_id === userId)?.display_name ?? '';
     const optimistic: BalanceSettlement = {
       id: tempId,
+      initiator_id: userId ?? '',
+      initiator_name: myName,
       counterpart_id: counterpartId,
       counterpart_name: counterpartName,
       amount,
@@ -351,7 +355,7 @@ export default function TabDetailScreen() {
         return { ...old, settlements: old.settlements.filter((s) => s.id !== tempId) };
       });
     }
-  }, [id, data?.tab.name]);
+  }, [id, data?.tab.name, data?.tab.members, userId]);
 
   // ── Restore a settled balance (swipe action on settled rows) ─
   const handleRestore = useCallback(async (settlementId: string) => {
@@ -442,9 +446,15 @@ export default function TabDetailScreen() {
     );
   }
 
-  const { tab, expenses, balances, settlements } = data;
+  const { tab, expenses, balances, settlements: rawSettlements } = data;
   const myBalances = toMyBalances(balances, userId ?? '');
   const memberMap = Object.fromEntries(tab.members.map((m) => [m.user_id, m]));
+
+  // Normalize i_owe to always reflect the current user's perspective.
+  // When someone else initiated the settlement, their i_owe is from their perspective — flip it.
+  const settlements = rawSettlements.map((s) =>
+    s.initiator_id === (userId ?? '') ? s : { ...s, i_owe: !s.i_owe }
+  );
 
   // ── Balance display computation ───────────────────────────
   //
@@ -455,7 +465,7 @@ export default function TabDetailScreen() {
 
   function totalSettledFor(counterpartId: string): number {
     return settlements
-      .filter((s) => s.counterpart_id === counterpartId)
+      .filter((s) => s.counterpart_id === counterpartId || s.initiator_id === counterpartId)
       .reduce((sum, s) => sum + s.amount, 0);
   }
 
@@ -493,37 +503,44 @@ export default function TabDetailScreen() {
     amount: number;
     i_owe: boolean;
     previously_settled: boolean;
-    // Set only for previously-settled rows — used to re-settle on payment.
+    // Set only for previously-settled rows.
     settlement_id?: string;
+    initiator_id?: string;
+    initiator_name?: string;
   };
 
   function renderActiveRow(cfg: ActiveRowConfig) {
     const member = memberMap[cfg.counterpart_id];
     const venmoHandle = member?.venmo_handle ?? null;
     const cashappHandle = member?.cashapp_handle ?? null;
+    const isOwner = !cfg.previously_settled || cfg.initiator_id === userId;
 
     return (
       <View key={cfg.key} style={styles.balanceRow}>
         <View style={styles.balanceLeft}>
           <Text style={styles.balanceName}>{cfg.counterpart_name}</Text>
           {cfg.previously_settled && (
-            <Text style={styles.previouslySettledTag}>previously settled</Text>
+            <Text style={styles.previouslySettledTag}>
+              Previously settled by {cfg.initiator_name}
+            </Text>
           )}
         </View>
         <View style={styles.balanceRight}>
           <Text style={[styles.balanceAmount, cfg.i_owe ? styles.owe : styles.owed]}>
             {cfg.i_owe ? '−' : '+'}${cfg.amount.toFixed(2)}
           </Text>
-          <PaymentIcons
-            venmoHandle={venmoHandle}
-            cashappHandle={cashappHandle}
-            unlocked={linksUnlocked}
-            onSettle={(platform, handle) =>
-              cfg.previously_settled && cfg.settlement_id
-                ? handleReSettle(cfg.settlement_id, cfg.amount, platform, handle)
-                : handleSettle(cfg.counterpart_id, cfg.counterpart_name, cfg.amount, cfg.i_owe, platform, handle)
-            }
-          />
+          {isOwner && (
+            <PaymentIcons
+              venmoHandle={venmoHandle}
+              cashappHandle={cashappHandle}
+              unlocked={linksUnlocked}
+              onSettle={(platform, handle) =>
+                cfg.previously_settled && cfg.settlement_id
+                  ? handleReSettle(cfg.settlement_id, cfg.amount, platform, handle)
+                  : handleSettle(cfg.counterpart_id, cfg.counterpart_name, cfg.amount, cfg.i_owe, platform, handle)
+              }
+            />
+          )}
         </View>
       </View>
     );
@@ -560,6 +577,8 @@ export default function TabDetailScreen() {
               i_owe: true,
               previously_settled: true,
               settlement_id: s.id,
+              initiator_id: s.initiator_id,
+              initiator_name: s.initiator_name,
             })
           )}
         </>
@@ -588,6 +607,8 @@ export default function TabDetailScreen() {
               i_owe: false,
               previously_settled: true,
               settlement_id: s.id,
+              initiator_id: s.initiator_id,
+              initiator_name: s.initiator_name,
             })
           )}
         </>
