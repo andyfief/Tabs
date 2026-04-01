@@ -32,36 +32,45 @@ def _fetch_tabs_for_ids(sb, tab_ids: list[str]) -> list[dict]:
     return result
 
 
-@router.get("/cleared")
-def list_cleared_tabs(current_user: str = Depends(get_current_user)) -> list[dict]:
-    """Return open tabs the current user has cleared from their homescreen."""
+@router.get("/all")
+def list_all_tabs(current_user: str = Depends(get_current_user)) -> list[dict]:
+    """Return all open tabs the current user is a member of, with is_cleared per-user."""
     sb = get_supabase()
 
     memberships = (
         sb.table("tab_members")
-        .select("tab_id")
+        .select("tab_id, cleared_at")
         .eq("user_id", current_user)
-        .not_.is_("cleared_at", "null")
         .execute()
     )
-    tab_ids = [row["tab_id"] for row in memberships.data]
-    return _fetch_tabs_for_ids(sb, tab_ids)
+    if not memberships.data:
+        return []
 
+    cleared_map = {row["tab_id"]: row["cleared_at"] is not None for row in memberships.data}
+    tab_ids = list(cleared_map.keys())
 
-@router.get("")
-def list_tabs(current_user: str = Depends(get_current_user)) -> list[dict]:
-    """Return open tabs the current user is a member of and has not cleared."""
-    sb = get_supabase()
-
-    memberships = (
-        sb.table("tab_members")
-        .select("tab_id")
-        .eq("user_id", current_user)
-        .is_("cleared_at", "null")
+    tabs_res = (
+        sb.table("tabs")
+        .select("id, name, description, status, created_at")
+        .in_("id", tab_ids)
+        .eq("status", "open")
         .execute()
     )
-    tab_ids = [row["tab_id"] for row in memberships.data]
-    return _fetch_tabs_for_ids(sb, tab_ids)
+
+    result = []
+    for tab in tabs_res.data:
+        count_res = (
+            sb.table("tab_members")
+            .select("user_id", count="exact")
+            .eq("tab_id", tab["id"])
+            .execute()
+        )
+        result.append({
+            **tab,
+            "member_count": count_res.count,
+            "is_cleared": cleared_map.get(tab["id"], False),
+        })
+    return result
 
 
 @router.post("", status_code=201)

@@ -12,21 +12,15 @@ import {
 import type { ViewToken } from 'react-native';
 import { Swipeable } from 'react-native-gesture-handler';
 import { useFocusEffect, useNavigation, useRouter } from 'expo-router';
+import { useQuery } from '@tanstack/react-query';
 import { apiFetch } from '../utils/api';
 import { supabase } from '../utils/supabase';
 import { queryClient, TAB_DETAIL_STALE_TIME } from '../utils/queryClient';
-import { fetchTabDetail } from '../utils/tabQueries';
+import { Tab, fetchAllTabs, fetchTabDetail } from '../utils/tabQueries';
 
 const DARK_BG = '#1c1c1e';
 const DARK_CARD = '#2c2c2e';
 const DARK_BORDER = '#3a3a3c';
-
-type Tab = {
-  id: string;
-  name: string;
-  description: string | null;
-  member_count: number;
-};
 
 type TabRowProps = {
   item: Tab;
@@ -55,11 +49,19 @@ function TabRow({ item, onPress, onClear }: TabRowProps) {
 export default function HomeScreen() {
   const router = useRouter();
   const navigation = useNavigation();
-  const [tabs, setTabs] = useState<Tab[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
   const [menuOpen, setMenuOpen] = useState(false);
   const initialized = useRef(false);
+
+  const { data: allTabs = [], isLoading, error, refetch } = useQuery({
+    queryKey: ['tabs'],
+    queryFn: fetchAllTabs,
+  });
+
+  const tabs = allTabs.filter((t) => !t.is_cleared);
+
+  useEffect(() => {
+    if (!isLoading) initialized.current = true;
+  }, [isLoading]);
 
   // Kept in a ref so the FlatList callback never changes identity after mount.
   const tabsRef = useRef<Tab[]>([]);
@@ -90,27 +92,12 @@ export default function HomeScreen() {
     itemVisiblePercentThreshold: 50,
   }).current;
 
-  const fetchTabs = useCallback(async () => {
-    try {
-      const data = await apiFetch<Tab[]>('/tabs');
-      setTabs(data);
-    } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : 'Failed to load tabs.');
-    }
-  }, []);
-
-  useEffect(() => {
-    fetchTabs().finally(() => {
-      setLoading(false);
-      initialized.current = true;
-    });
-  }, [fetchTabs]);
-
+  // Background refetch whenever the screen regains focus (e.g. returning from cleared-tabs).
   useFocusEffect(
     useCallback(() => {
       if (!initialized.current) return;
-      fetchTabs();
-    }, [fetchTabs])
+      refetch();
+    }, [refetch])
   );
 
   useEffect(() => {
@@ -133,18 +120,22 @@ export default function HomeScreen() {
   }, [navigation, router]);
 
   const handleClear = useCallback(async (tabId: string) => {
-    setTabs((prev) => prev.filter((t) => t.id !== tabId));
+    queryClient.setQueryData<Tab[]>(['tabs'], (prev = []) =>
+      prev.map((t) => t.id === tabId ? { ...t, is_cleared: true } : t)
+    );
     try {
       await apiFetch(`/tabs/${tabId}/clear`, { method: 'PATCH' });
     } catch {
-      fetchTabs();
+      queryClient.setQueryData<Tab[]>(['tabs'], (prev = []) =>
+        prev.map((t) => t.id === tabId ? { ...t, is_cleared: false } : t)
+      );
     }
-  }, [fetchTabs]);
+  }, []);
 
-  if (loading) return <View style={styles.center}><ActivityIndicator color="#fff" /></View>;
+  if (isLoading) return <View style={styles.center}><ActivityIndicator color="#fff" /></View>;
 
   if (error) {
-    return <View style={styles.center}><Text style={styles.error}>{error}</Text></View>;
+    return <View style={styles.center}><Text style={styles.error}>{(error as Error).message}</Text></View>;
   }
 
   return (
