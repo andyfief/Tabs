@@ -6,6 +6,7 @@ import {
   Pressable,
   StyleSheet,
   Text,
+  TextInput,
   TouchableWithoutFeedback,
   View,
 } from 'react-native';
@@ -21,6 +22,23 @@ import { Tab, fetchAllTabs, fetchTabDetail } from '../utils/tabQueries';
 const DARK_BG = '#1c1c1e';
 const DARK_CARD = '#2c2c2e';
 const DARK_BORDER = '#3a3a3c';
+
+function AvatarCircles({ count }: { count: number }) {
+  const visible = Math.min(count, 3);
+  const overflow = count - visible;
+  return (
+    <View style={styles.avatarRow}>
+      {Array.from({ length: visible }).map((_, i) => (
+        <View key={i} style={styles.avatarCircle} />
+      ))}
+      {overflow > 0 && (
+        <View style={[styles.avatarCircle, styles.avatarOverflow]}>
+          <Text style={styles.avatarOverflowText}>+{overflow}</Text>
+        </View>
+      )}
+    </View>
+  );
+}
 
 type TabRowProps = {
   item: Tab;
@@ -38,11 +56,56 @@ function TabRow({ item, onPress, onClear }: TabRowProps) {
     <Swipeable renderRightActions={renderRightAction} overshootRight={false}>
       <Pressable style={styles.row} onPress={onPress}>
         <Text style={styles.tabName}>{item.name}</Text>
-        <Text style={styles.memberCount}>
-          {item.member_count} {item.member_count === 1 ? 'member' : 'members'}
-        </Text>
+        <AvatarCircles count={item.member_count} />
       </Pressable>
     </Swipeable>
+  );
+}
+
+type NewTabDraftRowProps = {
+  onSubmit: (name: string) => void;
+  onCancel: () => void;
+  submitting: boolean;
+};
+
+function NewTabDraftRow({ onSubmit, onCancel, submitting }: NewTabDraftRowProps) {
+  const [name, setName] = useState('');
+  const didSubmit = useRef(false);
+
+  function handleSubmit() {
+    const trimmed = name.trim();
+    if (trimmed) {
+      didSubmit.current = true;
+      onSubmit(trimmed);
+    }
+  }
+
+  // Cancel whenever the keyboard is dismissed, unless we already submitted
+  function handleBlur() {
+    if (!didSubmit.current) {
+      onCancel();
+    }
+  }
+
+  return (
+    <View style={[styles.row, styles.draftRow]}>
+      {submitting ? (
+        <ActivityIndicator color="#fff" size="small" style={styles.draftSpinner} />
+      ) : (
+        <TextInput
+          style={styles.draftInput}
+          placeholder="Tab name"
+          placeholderTextColor="#555"
+          value={name}
+          onChangeText={setName}
+          onSubmitEditing={handleSubmit}
+          onBlur={handleBlur}
+          autoFocus
+          returnKeyType="done"
+        />
+      )}
+      <AvatarCircles count={1} />
+    </View>
   );
 }
 
@@ -50,6 +113,8 @@ export default function HomeScreen() {
   const router = useRouter();
   const navigation = useNavigation();
   const [menuOpen, setMenuOpen] = useState(false);
+  const [creatingNew, setCreatingNew] = useState(false);
+  const [draftSubmitting, setDraftSubmitting] = useState(false);
 
   const { data: allTabs = [], isLoading, error } = useQuery({
     queryKey: ['tabs'],
@@ -118,6 +183,21 @@ export default function HomeScreen() {
     }
   }, []);
 
+  async function handleCreateTab(name: string) {
+    setDraftSubmitting(true);
+    try {
+      const tab = await apiFetch<{ id: string }>('/tabs', {
+        method: 'POST',
+        body: JSON.stringify({ name }),
+      });
+      setCreatingNew(false);
+      setDraftSubmitting(false);
+      router.push(`/tab/${tab.id}`);
+    } catch {
+      setDraftSubmitting(false);
+    }
+  }
+
   if (isLoading) return <View style={styles.center}><ActivityIndicator color="#fff" /></View>;
 
   if (error) {
@@ -126,7 +206,6 @@ export default function HomeScreen() {
 
   return (
     <View style={styles.container}>
-      {/* Caret dropdown menu */}
       <Modal visible={menuOpen} transparent animationType="fade">
         <TouchableWithoutFeedback onPress={() => setMenuOpen(false)}>
           <View style={styles.menuOverlay}>
@@ -159,18 +238,33 @@ export default function HomeScreen() {
             onClear={handleClear}
           />
         )}
-        ListEmptyComponent={
-          <View style={styles.center}>
-            <Text style={styles.empty}>No open tabs yet.</Text>
-          </View>
+        ListFooterComponent={
+          creatingNew ? (
+            <NewTabDraftRow
+              onSubmit={handleCreateTab}
+              onCancel={() => setCreatingNew(false)}
+              submitting={draftSubmitting}
+            />
+          ) : null
         }
-        contentContainerStyle={tabs.length === 0 ? styles.emptyContainer : undefined}
+        ListEmptyComponent={
+          !creatingNew ? (
+            <View style={styles.center}>
+              <Text style={styles.empty}>No open tabs yet.</Text>
+            </View>
+          ) : null
+        }
+        contentContainerStyle={tabs.length === 0 && !creatingNew ? styles.emptyContainer : undefined}
       />
       <View style={styles.bottomRow}>
         <Pressable style={[styles.fab, styles.fabSecondary]} onPress={() => router.push('/join')}>
           <Text style={styles.fabSecondaryLabel}>Join Tab</Text>
         </Pressable>
-        <Pressable style={styles.fab} onPress={() => router.push('/create-tab')}>
+        <Pressable
+          style={styles.fab}
+          onPress={() => { setCreatingNew(true); setDraftSubmitting(false); }}
+          disabled={creatingNew}
+        >
           <Text style={styles.fabLabel}>+ New Tab</Text>
         </Pressable>
       </View>
@@ -189,8 +283,29 @@ const styles = StyleSheet.create({
     borderColor: DARK_BORDER,
     backgroundColor: DARK_CARD,
   },
-  tabName: { fontSize: 16, fontWeight: '600', color: '#fff' },
-  memberCount: { fontSize: 13, color: '#8e8e93', marginTop: 2 },
+  tabName: { fontSize: 16, fontWeight: '600', color: '#fff', marginBottom: 8 },
+
+  // Avatar circles
+  avatarRow: { flexDirection: 'row', alignItems: 'center', gap: 5 },
+  avatarCircle: {
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    backgroundColor: '#48484a',
+  },
+  avatarOverflow: { justifyContent: 'center', alignItems: 'center' },
+  avatarOverflowText: { fontSize: 8, color: '#8e8e93', fontWeight: '600' },
+
+  // Draft row
+  draftRow: { borderLeftWidth: 2, borderLeftColor: '#555' },
+  draftInput: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#fff',
+    padding: 0,
+    marginBottom: 8,
+  },
+  draftSpinner: { marginBottom: 8, alignSelf: 'flex-start' },
 
   swipeClear: {
     backgroundColor: '#555',
