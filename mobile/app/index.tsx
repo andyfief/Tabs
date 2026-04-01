@@ -11,11 +11,11 @@ import {
 } from 'react-native';
 import type { ViewToken } from 'react-native';
 import { Swipeable } from 'react-native-gesture-handler';
-import { useFocusEffect, useNavigation, useRouter } from 'expo-router';
+import { useNavigation, useRouter } from 'expo-router';
 import { useQuery } from '@tanstack/react-query';
 import { apiFetch } from '../utils/api';
 import { supabase } from '../utils/supabase';
-import { queryClient, TAB_DETAIL_STALE_TIME } from '../utils/queryClient';
+import { queryClient } from '../utils/queryClient';
 import { Tab, fetchAllTabs, fetchTabDetail } from '../utils/tabQueries';
 
 const DARK_BG = '#1c1c1e';
@@ -50,18 +50,13 @@ export default function HomeScreen() {
   const router = useRouter();
   const navigation = useNavigation();
   const [menuOpen, setMenuOpen] = useState(false);
-  const initialized = useRef(false);
 
-  const { data: allTabs = [], isLoading, error, refetch } = useQuery({
+  const { data: allTabs = [], isLoading, error } = useQuery({
     queryKey: ['tabs'],
     queryFn: fetchAllTabs,
   });
 
   const tabs = allTabs.filter((t) => !t.is_cleared);
-
-  useEffect(() => {
-    if (!isLoading) initialized.current = true;
-  }, [isLoading]);
 
   // Kept in a ref so the FlatList callback never changes identity after mount.
   const tabsRef = useRef<Tab[]>([]);
@@ -79,7 +74,6 @@ export default function HomeScreen() {
             queryClient.prefetchQuery({
               queryKey: ['tab', tab.id],
               queryFn: () => fetchTabDetail(tab.id),
-              staleTime: TAB_DETAIL_STALE_TIME,
             });
           }
         }
@@ -91,14 +85,6 @@ export default function HomeScreen() {
     minimumViewTime: 200,
     itemVisiblePercentThreshold: 50,
   }).current;
-
-  // Background refetch whenever the screen regains focus (e.g. returning from cleared-tabs).
-  useFocusEffect(
-    useCallback(() => {
-      if (!initialized.current) return;
-      refetch();
-    }, [refetch])
-  );
 
   useEffect(() => {
     navigation.setOptions({

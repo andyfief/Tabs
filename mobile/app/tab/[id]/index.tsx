@@ -16,7 +16,7 @@ import { Swipeable } from 'react-native-gesture-handler';
 import { useFocusEffect, useLocalSearchParams, useRouter, useNavigation } from 'expo-router';
 import { useQuery } from '@tanstack/react-query';
 import { apiFetch } from '../../../utils/api';
-import { queryClient, TAB_DETAIL_STALE_TIME } from '../../../utils/queryClient';
+import { queryClient } from '../../../utils/queryClient';
 import { fetchTabDetail } from '../../../utils/tabQueries';
 import { buildVenmoLink, buildCashAppLink } from '../../../utils/paymentLinks';
 import type { Expense, TabDetailFull, BalanceSettlement } from '../../../utils/tabQueries';
@@ -205,7 +205,6 @@ export default function TabDetailScreen() {
   const { data, isLoading, isFetching, refetch, error } = useQuery({
     queryKey: ['tab', id],
     queryFn: () => fetchTabDetail(id!),
-    staleTime: TAB_DETAIL_STALE_TIME,
     enabled: !!id,
   });
 
