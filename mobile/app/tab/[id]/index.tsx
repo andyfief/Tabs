@@ -625,8 +625,7 @@ export default function TabDetailScreen() {
       {/* Header */}
       <View style={styles.header}>
         <Text style={styles.tabName}>{tab.name}</Text>
-        {tab.description ? <Text style={styles.description}>{tab.description}</Text> : null}
-        <Text style={styles.meta}>
+<Text style={styles.meta}>
           {tab.members.length} {tab.members.length === 1 ? 'member' : 'members'} · {tab.status}
         </Text>
       </View>
@@ -707,8 +706,7 @@ const styles = StyleSheet.create({
 
   header: { padding: 16, borderBottomWidth: StyleSheet.hairlineWidth, borderColor: DARK_BORDER },
   tabName: { fontSize: 20, fontWeight: '700', color: '#fff' },
-  description: { fontSize: 14, color: '#8e8e93', marginTop: 3 },
-  meta: { fontSize: 12, color: '#8e8e93', marginTop: 4 },
+meta: { fontSize: 12, color: '#8e8e93', marginTop: 4 },
 
   toggle: { flexDirection: 'row', borderBottomWidth: StyleSheet.hairlineWidth, borderColor: DARK_BORDER },
   toggleBtn: { flex: 1, paddingVertical: 10, alignItems: 'center' },

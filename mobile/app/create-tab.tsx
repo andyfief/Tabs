@@ -18,7 +18,7 @@ type TabResponse = { id: string };
 export default function CreateTabScreen() {
   const router = useRouter();
   const [name, setName] = useState('');
-  const [description, setDescription] = useState('');
+
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -32,7 +32,7 @@ export default function CreateTabScreen() {
     try {
       const tab = await apiFetch<TabResponse>('/tabs', {
         method: 'POST',
-        body: JSON.stringify({ name: name.trim(), description: description.trim() || null }),
+        body: JSON.stringify({ name: name.trim() }),
       });
       router.replace(`/tab/${tab.id}`);
     } catch (e: unknown) {
@@ -51,16 +51,6 @@ export default function CreateTabScreen() {
         placeholderTextColor="#555"
         value={name}
         onChangeText={setName}
-      />
-
-      <Text style={styles.label}>Description</Text>
-      <TextInput
-        style={[styles.input, styles.multiline]}
-        placeholder="Optional"
-        placeholderTextColor="#555"
-        value={description}
-        onChangeText={setDescription}
-        multiline
       />
 
       {error ? <Text style={styles.error}>{error}</Text> : null}
@@ -87,7 +77,6 @@ const styles = StyleSheet.create({
     fontSize: 15,
     color: '#fff',
   },
-  multiline: { height: 80, textAlignVertical: 'top' },
   error: { color: '#ff453a', fontSize: 13, marginTop: 12 },
   button: {
     marginTop: 24,

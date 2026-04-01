@@ -46,7 +46,6 @@ function ClearedTabRow({ item, onPress, onRestore }: TabRowProps) {
           <Text style={styles.tabName}>{item.name}</Text>
           <Text style={styles.meta}>
             {item.member_count} {item.member_count === 1 ? 'member' : 'members'}
-            {item.description ? `  ·  ${item.description}` : ''}
           </Text>
         </View>
         <Text style={styles.date}>Created {formatDate(item.created_at)}</Text>
