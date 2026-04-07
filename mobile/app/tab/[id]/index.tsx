@@ -30,6 +30,10 @@ const DARK_BORDER = '#3a3a3c';
 const VENMO_ICON = require('../../../assets/venmo.png') as number;
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 const CASHAPP_ICON = require('../../../assets/cashapp.png') as number;
+// eslint-disable-next-line @typescript-eslint/no-var-requires
+const ADD_PERSON_ICON = require('../../../assets/add_person.png') as number;
+// eslint-disable-next-line @typescript-eslint/no-var-requires
+const LEAVE_TAB_ICON = require('../../../assets/leave_tab.png') as number;
 
 // ─── Types ───────────────────────────────────────────────────
 
@@ -254,17 +258,40 @@ export default function TabDetailScreen() {
     }
   }, [id]);
 
+  const handleLeaveTab = useCallback(() => {
+    Alert.alert(
+      'Leave Tab',
+      'Are you sure you want to leave this tab? You will be removed from the member list.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Leave',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await apiFetch(`/tabs/${id}/members/me`, { method: 'DELETE' });
+              queryClient.invalidateQueries({ queryKey: ['tabs'] });
+              router.back();
+            } catch {
+              Alert.alert('Error', 'Could not leave the tab.');
+            }
+          },
+        },
+      ]
+    );
+  }, [id, router]);
+
   useEffect(() => {
     if (!data?.tab) return;
     navigation.setOptions({
       title: data.tab.name,
       headerRight: () => (
-        <Pressable onPress={handleShowInvite} style={{ paddingLeft: 6, paddingRight: 4, paddingVertical: 4 }}>
-          <Text style={{ color: '#ffffff', fontSize: 15 }}>Invite</Text>
+        <Pressable onPress={handleLeaveTab} style={{ paddingLeft: 6, paddingRight: 4, paddingVertical: 4 }}>
+          <Image source={LEAVE_TAB_ICON} style={{ width: 24, height: 24, tintColor: '#ff453a' }} />
         </Pressable>
       ),
     });
-  }, [data?.tab.name, navigation, handleShowInvite]);
+  }, [data?.tab.name, navigation, handleLeaveTab]);
 
   useEffect(() => {
     if (!isFetching) setRefreshing(false);
@@ -652,8 +679,13 @@ export default function TabDetailScreen() {
     <View style={styles.container}>
       {/* Header */}
       <View style={styles.header}>
-        <Text style={styles.tabName}>{tab.name}</Text>
-<Text style={styles.meta}>
+        <View style={styles.headerNameRow}>
+          <Text style={styles.tabName}>{tab.name}</Text>
+          <Pressable onPress={handleShowInvite} style={styles.addPersonBtn}>
+            <Image source={ADD_PERSON_ICON} style={styles.addPersonIcon} />
+          </Pressable>
+        </View>
+        <Text style={styles.meta}>
           {tab.members.length} {tab.members.length === 1 ? 'member' : 'members'} · {tab.status}
         </Text>
       </View>
@@ -733,7 +765,10 @@ const styles = StyleSheet.create({
   center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
 
   header: { padding: 16, borderBottomWidth: StyleSheet.hairlineWidth, borderColor: DARK_BORDER },
+  headerNameRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   tabName: { fontSize: 20, fontWeight: '700', color: '#fff' },
+  addPersonBtn: { padding: 2 },
+  addPersonIcon: { width: 22, height: 22, resizeMode: 'contain', tintColor: '#fff' },
 meta: { fontSize: 12, color: '#8e8e93', marginTop: 4 },
 
   toggle: { flexDirection: 'row', borderBottomWidth: StyleSheet.hairlineWidth, borderColor: DARK_BORDER },
