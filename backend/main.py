@@ -1,11 +1,26 @@
+import asyncio
 import logging
+from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 from routers import tabs, expenses, users, invites, settlements
+from routers.tabs import run_cleanup_loop
 
 logger = logging.getLogger("uvicorn.error")
 
-app = FastAPI(title="Tabs API")
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    task = asyncio.create_task(run_cleanup_loop())
+    yield
+    task.cancel()
+    try:
+        await task
+    except asyncio.CancelledError:
+        pass
+
+
+app = FastAPI(title="Tabs API", lifespan=lifespan)
 app.include_router(tabs.router)
 app.include_router(expenses.router)
 app.include_router(users.router)
