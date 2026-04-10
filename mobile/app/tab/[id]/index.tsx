@@ -19,7 +19,7 @@ import { apiFetch } from '../../../utils/api';
 import { queryClient } from '../../../utils/queryClient';
 import { fetchTabDetail } from '../../../utils/tabQueries';
 import { buildVenmoLink, buildCashAppLink } from '../../../utils/paymentLinks';
-import type { Expense, TabDetailFull, BalanceSettlement } from '../../../utils/tabQueries';
+import type { Expense, Tab, TabDetailFull, BalanceSettlement } from '../../../utils/tabQueries';
 import { useSession } from '../../../hooks/useSession';
 
 const DARK_BG = '#1c1c1e';
@@ -267,14 +267,33 @@ export default function TabDetailScreen() {
         {
           text: 'Leave',
           style: 'destructive',
-          onPress: async () => {
-            try {
-              await apiFetch(`/tabs/${id}/members/me`, { method: 'DELETE' });
-              queryClient.invalidateQueries({ queryKey: ['tabs'] });
-              router.back();
-            } catch {
-              Alert.alert('Error', 'Could not leave the tab.');
-            }
+          onPress: () => {
+            // Save the tab entry now so we can restore it if the DELETE fails.
+            const prevTabs = queryClient.getQueryData<Tab[]>(['tabs']) ?? [];
+            const removedTab = prevTabs.find((t) => t.id === id);
+
+            // Optimistically remove from home screen and navigate away immediately.
+            queryClient.setQueryData<Tab[]>(['tabs'], (prev = []) =>
+              prev.filter((t) => t.id !== id)
+            );
+            router.back();
+
+            apiFetch(`/tabs/${id}/members/me`, { method: 'DELETE' })
+              .then(() => {
+                queryClient.invalidateQueries({ queryKey: ['tabs'] });
+              })
+              .catch(() => {
+                // Restore the tab row on the home screen — but don't re-open the tab.
+                if (removedTab) {
+                  queryClient.setQueryData<Tab[]>(['tabs'], (prev = []) => [
+                    ...prev,
+                    removedTab,
+                  ]);
+                } else {
+                  queryClient.invalidateQueries({ queryKey: ['tabs'] });
+                }
+                Alert.alert('Error', 'Could not leave the tab.');
+              });
           },
         },
       ]
@@ -305,8 +324,13 @@ export default function TabDetailScreen() {
 
   useFocusEffect(
     useCallback(() => {
-      if (!isTempRef.current) refetch();
-    }, [refetch])
+      if (isTempRef.current) return;
+      // If an optimistic expense is pending (POST still in flight), skip the refetch —
+      // the POST handler's invalidateQueries will trigger it once the server responds.
+      const cached = queryClient.getQueryData<TabDetailFull>(['tab', id]);
+      if (cached?.expenses.some((e) => e.id.startsWith('temp-expense-'))) return;
+      refetch();
+    }, [refetch, id])
   );
 
   const onRefresh = useCallback(() => {

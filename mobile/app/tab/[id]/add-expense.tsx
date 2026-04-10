@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import {
-  ActivityIndicator,
+  Alert,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -13,7 +13,7 @@ import { useQuery } from '@tanstack/react-query';
 import { apiFetch } from '../../../utils/api';
 import { queryClient } from '../../../utils/queryClient';
 import { fetchTabDetail } from '../../../utils/tabQueries';
-import type { Member } from '../../../utils/tabQueries';
+import type { Expense, Member, TabDetailFull } from '../../../utils/tabQueries';
 import { HARDCODED_USER_ID } from '../../../utils/constants';
 
 const DARK_BG = '#1c1c1e';
@@ -47,7 +47,6 @@ export default function AddExpenseScreen() {
     splitInitialized.current = true;
   }, [members]);
 
-  const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   function toggleSplit(userId: string) {
@@ -65,7 +64,26 @@ export default function AddExpenseScreen() {
     if (splitIds.size === 0) { setError('Select at least one member for the split.'); return; }
 
     setError(null);
-    setSubmitting(true);
+
+    // Inject an optimistic expense into the cache so it appears immediately on the tab screen.
+    const tempId = `temp-expense-${Date.now()}`;
+    const payerName = members.find((m) => m.user_id === payerId)?.display_name ?? '';
+    const optimistic: Expense = {
+      id: tempId,
+      title: title.trim(),
+      amount: parsedAmount,
+      payer_name: payerName,
+      created_at: new Date().toISOString(),
+      removed_at: null,
+    };
+    queryClient.setQueryData<TabDetailFull>(['tab', tabId], (old) => {
+      if (!old) return old;
+      return { ...old, expenses: [optimistic, ...old.expenses] };
+    });
+
+    router.back();
+
+    // POST in the background; invalidate on success so balances update from the view.
     try {
       await apiFetch(`/tabs/${tabId}/expenses`, {
         method: 'POST',
@@ -76,13 +94,14 @@ export default function AddExpenseScreen() {
           split_member_ids: Array.from(splitIds),
         }),
       });
-      // Invalidate so the tab detail screen refetches expenses and balances.
       queryClient.invalidateQueries({ queryKey: ['tab', tabId] });
-      router.back();
     } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : 'Something went wrong.');
-    } finally {
-      setSubmitting(false);
+      // Roll back the optimistic expense and tell the user.
+      queryClient.setQueryData<TabDetailFull>(['tab', tabId], (old) => {
+        if (!old) return old;
+        return { ...old, expenses: old.expenses.filter((ex) => ex.id !== tempId) };
+      });
+      Alert.alert('Error', e instanceof Error ? e.message : 'Could not add expense.');
     }
   }
 
@@ -158,12 +177,8 @@ export default function AddExpenseScreen() {
 
       {error ? <Text style={styles.error}>{error}</Text> : null}
 
-      <Pressable style={styles.submitBtn} onPress={handleSubmit} disabled={submitting}>
-        {submitting ? (
-          <ActivityIndicator color="#fff" />
-        ) : (
-          <Text style={styles.submitLabel}>Add Expense</Text>
-        )}
+      <Pressable style={styles.submitBtn} onPress={handleSubmit}>
+        <Text style={styles.submitLabel}>Add Expense</Text>
       </Pressable>
     </ScrollView>
   );
