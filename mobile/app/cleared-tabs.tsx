@@ -7,7 +7,7 @@ import {
   Text,
   View,
 } from 'react-native';
-import { Swipeable } from 'react-native-gesture-handler';
+import { SwipeToActionRow } from '../components/SwipeToActionRow';
 import { useRouter } from 'expo-router';
 import { useQuery } from '@tanstack/react-query';
 import { apiFetch } from '../utils/api';
@@ -29,18 +29,20 @@ function formatDate(iso: string): string {
 type TabRowProps = {
   item: Tab;
   onPress: () => void;
-  onRestore: (id: string) => void;
+  onAction: (id: string) => void;
+  onCommit: (id: string) => void;
 };
 
-function ClearedTabRow({ item, onPress, onRestore }: TabRowProps) {
-  const renderRightAction = () => (
-    <Pressable style={styles.swipeRestore} onPress={() => onRestore(item.id)}>
-      <Text style={styles.swipeLabel}>Restore</Text>
-    </Pressable>
-  );
-
+function ClearedTabRow({ item, onPress, onAction, onCommit }: TabRowProps) {
   return (
-    <Swipeable renderRightActions={renderRightAction} overshootRight={false}>
+    <SwipeToActionRow
+      label="Restore"
+      activeColor="#30d158"
+      dimColor="#0d2a15"
+      disappears={true}
+      onAction={() => onAction(item.id)}
+      onCommit={() => onCommit(item.id)}
+    >
       <Pressable style={styles.row} onPress={onPress}>
         <View style={styles.rowLeft}>
           <Text style={styles.tabName}>{item.name}</Text>
@@ -50,7 +52,7 @@ function ClearedTabRow({ item, onPress, onRestore }: TabRowProps) {
         </View>
         <Text style={styles.date}>Created {formatDate(item.created_at)}</Text>
       </Pressable>
-    </Swipeable>
+    </SwipeToActionRow>
   );
 }
 
@@ -64,18 +66,18 @@ export default function ClearedTabsScreen() {
 
   const tabs = allTabs.filter((t) => t.is_cleared);
 
-  const handleRestore = useCallback(async (tabId: string) => {
-    queryClient.setQueryData<Tab[]>(['tabs'], (prev = []) =>
-      prev.map((t) => t.id === tabId ? { ...t, is_cleared: false } : t)
-    );
-    try {
-      await apiFetch(`/tabs/${tabId}/clear`, { method: 'PATCH' });
-    } catch {
-      console.log("catch")
+  const handleRestoreAction = useCallback((tabId: string) => {
+    apiFetch(`/tabs/${tabId}/clear`, { method: 'PATCH' }).catch(() => {
       queryClient.setQueryData<Tab[]>(['tabs'], (prev = []) =>
         prev.map((t) => t.id === tabId ? { ...t, is_cleared: true } : t)
       );
-    }
+    });
+  }, []);
+
+  const handleRestoreCommit = useCallback((tabId: string) => {
+    queryClient.setQueryData<Tab[]>(['tabs'], (prev = []) =>
+      prev.map((t) => t.id === tabId ? { ...t, is_cleared: false } : t)
+    );
   }, []);
 
   if (isLoading) {
@@ -99,7 +101,8 @@ export default function ClearedTabsScreen() {
           <ClearedTabRow
             item={item}
             onPress={() => router.push(`/tab/${item.id}`)}
-            onRestore={handleRestore}
+            onAction={handleRestoreAction}
+            onCommit={handleRestoreCommit}
           />
         )}
         ListEmptyComponent={
@@ -131,14 +134,6 @@ const styles = StyleSheet.create({
   tabName: { fontSize: 16, fontWeight: '600', color: '#fff' },
   meta: { fontSize: 13, color: '#8e8e93', marginTop: 2 },
   date: { fontSize: 12, color: '#8e8e93' },
-
-  swipeRestore: {
-    backgroundColor: '#30d158',
-    justifyContent: 'center',
-    alignItems: 'center',
-    width: 90,
-  },
-  swipeLabel: { color: '#fff', fontWeight: '600', fontSize: 14 },
 
   empty: { color: '#8e8e93', fontSize: 15 },
   error: { color: '#ff453a', fontSize: 14, textAlign: 'center', padding: 16 },
