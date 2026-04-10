@@ -11,7 +11,7 @@ import {
   View,
 } from 'react-native';
 import type { ViewToken } from 'react-native';
-import { Swipeable } from 'react-native-gesture-handler';
+import { SwipeToActionRow } from '../components/SwipeToActionRow';
 import { useFocusEffect, useNavigation, useRouter } from 'expo-router';
 import { useQuery } from '@tanstack/react-query';
 import { apiFetch } from '../utils/api';
@@ -43,22 +43,25 @@ function AvatarCircles({ count }: { count: number }) {
 type TabRowProps = {
   item: Tab;
   onPress: () => void;
-  onClear: (id: string) => void;
+  onAction: (id: string) => void;
+  onCommit: (id: string) => void;
 };
 
-function TabRow({ item, onPress, onClear }: TabRowProps) {
-  const renderRightAction = () => (
-    <Pressable style={styles.swipeClear} onPress={() => onClear(item.id)}>
-      <Text style={styles.swipeLabel}>Clear</Text>
-    </Pressable>
-  );
+function TabRow({ item, onPress, onAction, onCommit }: TabRowProps) {
   return (
-    <Swipeable renderRightActions={renderRightAction} overshootRight={false}>
+    <SwipeToActionRow
+      label="Clear"
+      activeColor="#555"
+      dimColor="#2a2a2c"
+      disappears={true}
+      onAction={() => onAction(item.id)}
+      onCommit={() => onCommit(item.id)}
+    >
       <Pressable style={styles.row} onPress={onPress}>
         <Text style={styles.tabName}>{item.name}</Text>
         <AvatarCircles count={item.member_count} />
       </Pressable>
-    </Swipeable>
+    </SwipeToActionRow>
   );
 }
 
@@ -174,17 +177,19 @@ export default function HomeScreen() {
     });
   }, [navigation, router]);
 
-  const handleClear = useCallback(async (tabId: string) => {
-    queryClient.setQueryData<Tab[]>(['tabs'], (prev = []) =>
-      prev.map((t) => t.id === tabId ? { ...t, is_cleared: true } : t)
-    );
-    try {
-      await apiFetch(`/tabs/${tabId}/clear`, { method: 'PATCH' });
-    } catch {
+  const handleClearAction = useCallback((tabId: string) => {
+    // Start the API call immediately; if it fails after the row is gone, revert.
+    apiFetch(`/tabs/${tabId}/clear`, { method: 'PATCH' }).catch(() => {
       queryClient.setQueryData<Tab[]>(['tabs'], (prev = []) =>
         prev.map((t) => t.id === tabId ? { ...t, is_cleared: false } : t)
       );
-    }
+    });
+  }, []);
+
+  const handleClearCommit = useCallback((tabId: string) => {
+    queryClient.setQueryData<Tab[]>(['tabs'], (prev = []) =>
+      prev.map((t) => t.id === tabId ? { ...t, is_cleared: true } : t)
+    );
   }, []);
 
   async function handleCreateTab(name: string) {
@@ -267,7 +272,8 @@ export default function HomeScreen() {
           <TabRow
             item={item}
             onPress={() => router.push(`/tab/${item.id}`)}
-            onClear={handleClear}
+            onAction={handleClearAction}
+            onCommit={handleClearCommit}
           />
         )}
         ListFooterComponent={
@@ -336,14 +342,6 @@ const styles = StyleSheet.create({
     padding: 0,
     marginBottom: 8,
   },
-  swipeClear: {
-    backgroundColor: '#555',
-    justifyContent: 'center',
-    alignItems: 'center',
-    width: 80,
-  },
-  swipeLabel: { color: '#fff', fontWeight: '600', fontSize: 14 },
-
   // Header
   headerMenuBtn: { paddingHorizontal: 12, paddingVertical: 6 },
   headerMenuCaret: { fontSize: 18, color: '#fff', fontWeight: '600' },

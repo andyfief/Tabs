@@ -12,7 +12,7 @@ import {
   View,
 } from 'react-native';
 import * as Clipboard from 'expo-clipboard';
-import { Swipeable } from 'react-native-gesture-handler';
+import { SwipeToActionRow } from '../../../components/SwipeToActionRow';
 import { useFocusEffect, useLocalSearchParams, useRouter, useNavigation } from 'expo-router';
 import { useQuery } from '@tanstack/react-query';
 import { apiFetch } from '../../../utils/api';
@@ -81,7 +81,7 @@ function formatDate(iso: string): string {
   return new Date(iso).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
 }
 
-// ─── Swipeable expense row ────────────────────────────────────
+// ─── Expense row ─────────────────────────────────────────────
 
 type ExpenseRowProps = {
   item: Expense;
@@ -91,17 +91,15 @@ type ExpenseRowProps = {
 function ExpenseRow({ item, onToggle }: ExpenseRowProps) {
   const removed = item.removed_at !== null;
 
-  const renderRightAction = () => (
-    <Pressable
-      style={[styles.swipeAction, removed ? styles.swipeRestore : styles.swipeRemove]}
-      onPress={() => onToggle(item.id)}
-    >
-      <Text style={styles.swipeLabel}>{removed ? 'Restore' : 'Remove'}</Text>
-    </Pressable>
-  );
-
   return (
-    <Swipeable renderRightActions={renderRightAction} overshootRight={false}>
+    <SwipeToActionRow
+      label={removed ? 'Restore' : 'Remove'}
+      activeColor={removed ? '#30d158' : '#c0392b'}
+      dimColor={removed ? '#0d2a15' : '#2a0d0d'}
+      disappears={false}
+      onAction={() => onToggle(item.id)}
+      onCommit={() => {}}
+    >
       <View style={[styles.expenseRow, removed && styles.expenseRowRemoved]}>
         <View style={styles.expenseLeft}>
           <Text style={[styles.expenseTitle, removed && styles.textRemoved]}>
@@ -116,7 +114,7 @@ function ExpenseRow({ item, onToggle }: ExpenseRowProps) {
           ${item.amount.toFixed(2)}
         </Text>
       </View>
-    </Swipeable>
+    </SwipeToActionRow>
   );
 }
 
@@ -169,18 +167,20 @@ function PaymentIcons({
 
 type SettledRowProps = {
   item: BalanceSettlement;
-  onRestore: (id: string) => void;
+  onAction: (id: string) => void;
+  onCommit: (id: string) => void;
 };
 
-function SettledRow({ item, onRestore }: SettledRowProps) {
-  const renderRightAction = () => (
-    <Pressable style={[styles.swipeAction, styles.swipeRestore]} onPress={() => onRestore(item.id)}>
-      <Text style={styles.swipeLabel}>Restore</Text>
-    </Pressable>
-  );
-
+function SettledRow({ item, onAction, onCommit }: SettledRowProps) {
   return (
-    <Swipeable renderRightActions={renderRightAction} overshootRight={false}>
+    <SwipeToActionRow
+      label="Restore"
+      activeColor="#30d158"
+      dimColor="#0d2a15"
+      disappears={true}
+      onAction={() => onAction(item.id)}
+      onCommit={() => onCommit(item.id)}
+    >
       <View style={[styles.balanceRow, styles.balanceRowSettled]}>
         <View style={styles.balanceLeft}>
           <Text style={[styles.balanceName, styles.textSettled]}>{item.counterpart_name}</Text>
@@ -190,7 +190,7 @@ function SettledRow({ item, onRestore }: SettledRowProps) {
           {item.i_owe ? '−' : '+'}${item.amount.toFixed(2)}
         </Text>
       </View>
-    </Swipeable>
+    </SwipeToActionRow>
   );
 }
 
@@ -436,7 +436,22 @@ export default function TabDetailScreen() {
   }, [id, data?.tab.name, data?.tab.members, userId]);
 
   // ── Restore a settled balance (swipe action on settled rows) ─
-  const handleRestore = useCallback(async (settlementId: string) => {
+  const handleRestoreAction = useCallback((settlementId: string) => {
+    apiFetch(`/tabs/${id}/balance-settlements/${settlementId}/restore`, { method: 'PATCH' })
+      .catch(() => {
+        queryClient.setQueryData<TabDetailFull>(['tab', id], (old) => {
+          if (!old) return old;
+          return {
+            ...old,
+            settlements: old.settlements.map((s) =>
+              s.id === settlementId ? { ...s, restored_at: null } : s
+            ),
+          };
+        });
+      });
+  }, [id]);
+
+  const handleRestoreCommit = useCallback((settlementId: string) => {
     const now = new Date().toISOString();
     queryClient.setQueryData<TabDetailFull>(['tab', id], (old) => {
       if (!old) return old;
@@ -447,20 +462,6 @@ export default function TabDetailScreen() {
         ),
       };
     });
-
-    try {
-      await apiFetch(`/tabs/${id}/balance-settlements/${settlementId}/restore`, { method: 'PATCH' });
-    } catch {
-      queryClient.setQueryData<TabDetailFull>(['tab', id], (old) => {
-        if (!old) return old;
-        return {
-          ...old,
-          settlements: old.settlements.map((s) =>
-            s.id === settlementId ? { ...s, restored_at: null } : s
-          ),
-        };
-      });
-    }
   }, [id]);
 
   // ── Re-settle a previously-restored balance (payment click on "previously settled" rows) ─
@@ -768,7 +769,7 @@ export default function TabDetailScreen() {
             refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#fff" />}
             ListHeaderComponent={balancesHeader}
             renderItem={({ item }) => (
-              <SettledRow item={item} onRestore={handleRestore} />
+              <SettledRow item={item} onAction={handleRestoreAction} onCommit={handleRestoreCommit} />
             )}
           />
           {!linksUnlocked && hasAnything && (
@@ -820,15 +821,6 @@ meta: { fontSize: 12, color: '#8e8e93', marginTop: 4 },
   expenseMeta: { fontSize: 12, color: '#8e8e93', marginTop: 2 },
   expenseAmount: { fontSize: 15, fontWeight: '600', color: '#fff' },
   textRemoved: { color: '#555' },
-
-  swipeAction: {
-    justifyContent: 'center',
-    alignItems: 'center',
-    width: 90,
-  },
-  swipeRemove: { backgroundColor: '#c0392b' },
-  swipeRestore: { backgroundColor: '#30d158' },
-  swipeLabel: { color: '#fff', fontWeight: '600', fontSize: 14 },
 
   // ── Balances ──────────────────────────────────────────────
 
