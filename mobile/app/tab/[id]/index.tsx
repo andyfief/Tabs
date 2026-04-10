@@ -11,9 +11,11 @@ import {
   Text,
   View,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { Ionicons } from '@expo/vector-icons';
 import * as Clipboard from 'expo-clipboard';
 import { SwipeToActionRow } from '../../../components/SwipeToActionRow';
-import { useFocusEffect, useLocalSearchParams, useRouter, useNavigation } from 'expo-router';
+import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import { useQuery } from '@tanstack/react-query';
 import { apiFetch } from '../../../utils/api';
 import { queryClient } from '../../../utils/queryClient';
@@ -30,10 +32,6 @@ const DARK_BORDER = '#3a3a3c';
 const VENMO_ICON = require('../../../assets/venmo.png') as number;
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 const CASHAPP_ICON = require('../../../assets/cashapp.png') as number;
-// eslint-disable-next-line @typescript-eslint/no-var-requires
-const ADD_PERSON_ICON = require('../../../assets/add_person.png') as number;
-// eslint-disable-next-line @typescript-eslint/no-var-requires
-const LEAVE_TAB_ICON = require('../../../assets/leave_tab.png') as number;
 
 // ─── Types ───────────────────────────────────────────────────
 
@@ -140,7 +138,8 @@ function PaymentIcons({
       {venmoHandle && (
         <Pressable
           onPress={unlocked ? () => onSettle('venmo', venmoHandle) : undefined}
-          style={styles.iconBtn}
+          android_ripple={null}
+          style={({ pressed }) => [styles.iconBtn, { opacity: pressed ? 0.6 : 1 }]}
         >
           <Image
             source={VENMO_ICON}
@@ -151,7 +150,8 @@ function PaymentIcons({
       {cashappHandle && (
         <Pressable
           onPress={unlocked ? () => onSettle('cashapp', cashappHandle) : undefined}
-          style={styles.iconBtn}
+          android_ripple={null}
+          style={({ pressed }) => [styles.iconBtn, { opacity: pressed ? 0.6 : 1 }]}
         >
           <Image
             source={CASHAPP_ICON}
@@ -201,7 +201,7 @@ type Panel = 'expenses' | 'balances';
 export default function TabDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
-  const navigation = useNavigation();
+  const insets = useSafeAreaInsets();
   const { userId } = useSession();
   const [panel, setPanel] = useState<Panel>('expenses');
   const [refreshing, setRefreshing] = useState(false);
@@ -300,17 +300,6 @@ export default function TabDetailScreen() {
     );
   }, [id, router]);
 
-  useEffect(() => {
-    if (!data?.tab) return;
-    navigation.setOptions({
-      title: data.tab.name,
-      headerRight: () => (
-        <Pressable onPress={handleLeaveTab} style={{ paddingLeft: 6, paddingRight: 4, paddingVertical: 4 }}>
-          <Image source={LEAVE_TAB_ICON} style={{ width: 24, height: 24, tintColor: '#ff453a' }} />
-        </Pressable>
-      ),
-    });
-  }, [data?.tab.name, navigation, handleLeaveTab]);
 
   useEffect(() => {
     if (!isFetching) setRefreshing(false);
@@ -701,13 +690,36 @@ export default function TabDetailScreen() {
   );
 
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, { paddingTop: insets.top }]}>
+      {/* Nav bar */}
+      <View style={styles.navBar}>
+        <Pressable
+          onPress={() => router.back()}
+          android_ripple={null}
+          style={({ pressed }) => [styles.navBtn, { opacity: pressed ? 0.6 : 1 }]}
+        >
+          <Ionicons name="chevron-back" size={24} color="#fff" />
+          <Text style={styles.navBackLabel}>My Tabs</Text>
+        </Pressable>
+        <Pressable
+          onPress={handleLeaveTab}
+          android_ripple={null}
+          style={({ pressed }) => [styles.navBtn, { opacity: pressed ? 0.6 : 1 }]}
+        >
+          <Ionicons name="log-out-outline" size={22} color="#ff453a" />
+        </Pressable>
+      </View>
+
       {/* Header */}
       <View style={styles.header}>
         <View style={styles.headerNameRow}>
           <Text style={styles.tabName}>{tab.name}</Text>
-          <Pressable onPress={handleShowInvite} style={styles.addPersonBtn}>
-            <Image source={ADD_PERSON_ICON} style={styles.addPersonIcon} />
+          <Pressable
+            onPress={handleShowInvite}
+            android_ripple={null}
+            style={({ pressed }) => [styles.addPersonBtn, { opacity: pressed ? 0.6 : 1 }]}
+          >
+            <Ionicons name="person-add-outline" size={22} color="#fff" />
           </Pressable>
         </View>
         <Text style={styles.meta}>
@@ -718,7 +730,8 @@ export default function TabDetailScreen() {
       {/* Toggle */}
       <View style={styles.toggle}>
         <Pressable
-          style={[styles.toggleBtn, panel === 'expenses' && styles.toggleActive]}
+          android_ripple={null}
+          style={({ pressed }) => [styles.toggleBtn, panel === 'expenses' && styles.toggleActive, { opacity: pressed ? 0.6 : 1 }]}
           onPress={() => setPanel('expenses')}
         >
           <Text style={[styles.toggleLabel, panel === 'expenses' && styles.toggleLabelActive]}>
@@ -726,7 +739,8 @@ export default function TabDetailScreen() {
           </Text>
         </Pressable>
         <Pressable
-          style={[styles.toggleBtn, panel === 'balances' && styles.toggleActive]}
+          android_ripple={null}
+          style={({ pressed }) => [styles.toggleBtn, panel === 'balances' && styles.toggleActive, { opacity: pressed ? 0.6 : 1 }]}
           onPress={() => setPanel('balances')}
         >
           <Text style={[styles.toggleLabel, panel === 'balances' && styles.toggleLabelActive]}>
@@ -739,7 +753,8 @@ export default function TabDetailScreen() {
       {panel === 'expenses' && (
         <>
           <Pressable
-            style={styles.addBtn}
+            android_ripple={null}
+            style={({ pressed }) => [styles.addBtn, { opacity: pressed ? 0.7 : 1 }]}
             onPress={() => router.push(`/tab/${id}/add-expense`)}
           >
             <Text style={styles.addBtnLabel}>+ Add Expense</Text>
@@ -773,7 +788,7 @@ export default function TabDetailScreen() {
             )}
           />
           {!linksUnlocked && hasAnything && (
-            <Pressable style={styles.unlockBtn} onPress={handleUnlock}>
+            <Pressable android_ripple={null} style={({ pressed }) => [styles.unlockBtn, { opacity: pressed ? 0.7 : 1 }]} onPress={handleUnlock}>
               <Text style={styles.unlockBtnLabel}>Close My Balances</Text>
             </Pressable>
           )}
@@ -787,13 +802,24 @@ export default function TabDetailScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: DARK_BG },
+
+  navBar: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 8,
+    paddingVertical: 8,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderColor: DARK_BORDER,
+  },
+  navBtn: { flexDirection: 'row', alignItems: 'center', padding: 6 },
+  navBackLabel: { color: '#fff', fontSize: 17 },
   center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
 
   header: { padding: 16, borderBottomWidth: StyleSheet.hairlineWidth, borderColor: DARK_BORDER },
   headerNameRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   tabName: { fontSize: 20, fontWeight: '700', color: '#fff' },
   addPersonBtn: { padding: 2 },
-  addPersonIcon: { width: 22, height: 22, resizeMode: 'contain', tintColor: '#fff' },
 meta: { fontSize: 12, color: '#8e8e93', marginTop: 4 },
 
   toggle: { flexDirection: 'row', borderBottomWidth: StyleSheet.hairlineWidth, borderColor: DARK_BORDER },
