@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   FlatList,
@@ -12,7 +12,9 @@ import {
 } from 'react-native';
 import type { ViewToken } from 'react-native';
 import { SwipeToActionRow } from '../components/SwipeToActionRow';
-import { useFocusEffect, useNavigation, useRouter } from 'expo-router';
+import { useFocusEffect, useRouter } from 'expo-router';
+import { Ionicons } from '@expo/vector-icons';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useQuery } from '@tanstack/react-query';
 import { apiFetch } from '../utils/api';
 import { supabase } from '../utils/supabase';
@@ -109,7 +111,7 @@ function NewTabDraftRow({ onSubmit, onCancel }: NewTabDraftRowProps) {
 
 export default function HomeScreen() {
   const router = useRouter();
-  const navigation = useNavigation();
+  const insets = useSafeAreaInsets();
   const [menuOpen, setMenuOpen] = useState(false);
   const [creatingNew, setCreatingNew] = useState(false);
 
@@ -157,25 +159,6 @@ export default function HomeScreen() {
     minimumViewTime: 200,
     itemVisiblePercentThreshold: 50,
   }).current;
-
-  useEffect(() => {
-    navigation.setOptions({
-      headerLeft: () =>
-        process.env.EXPO_PUBLIC_SKIP_AUTH !== 'true' ? (
-          <Pressable style={styles.headerMenuBtn} onPress={() => setMenuOpen(true)}>
-            <Text style={styles.headerMenuCaret}>∨</Text>
-          </Pressable>
-        ) : null,
-      headerTitle: () => (
-        <View style={styles.headerTitleRow}>
-          <Text style={styles.headerTitleText}>My Tabs</Text>
-          <Pressable style={styles.clearedBtn} onPress={() => router.push('/cleared-tabs')}>
-            <Text style={styles.clearedBtnLabel}>Cleared</Text>
-          </Pressable>
-        </View>
-      ),
-    });
-  }, [navigation, router]);
 
   const handleClearAction = useCallback((tabId: string) => {
     // Start the API call immediately; if it fails after the row is gone, revert.
@@ -242,12 +225,12 @@ export default function HomeScreen() {
   }
 
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, { paddingTop: insets.top }]}>
       <Modal visible={menuOpen} transparent animationType="fade">
         <TouchableWithoutFeedback onPress={() => setMenuOpen(false)}>
           <View style={styles.menuOverlay}>
             <TouchableWithoutFeedback>
-              <View style={styles.menuDropdown}>
+              <View style={[styles.menuDropdown, { top: insets.top + 46 }]}>
                 <Pressable
                   style={styles.menuItem}
                   onPress={() => {
@@ -262,6 +245,29 @@ export default function HomeScreen() {
           </View>
         </TouchableWithoutFeedback>
       </Modal>
+
+      {/* Nav bar */}
+      <View style={styles.navBar}>
+        {process.env.EXPO_PUBLIC_SKIP_AUTH !== 'true' ? (
+          <Pressable
+            onPress={() => setMenuOpen(true)}
+            android_ripple={null}
+            style={({ pressed }) => [styles.navBtn, { opacity: pressed ? 0.6 : 1 }]}
+          >
+            <Ionicons name="menu" size={24} color="#fff" />
+          </Pressable>
+        ) : (
+          <View style={styles.navBtn} />
+        )}
+        <Text style={styles.navTitle}>My Tabs</Text>
+        <Pressable
+          onPress={() => router.push('/cleared-tabs')}
+          android_ripple={null}
+          style={({ pressed }) => [styles.clearedBtn, { opacity: pressed ? 0.6 : 1 }]}
+        >
+          <Text style={styles.clearedBtnLabel}>Cleared</Text>
+        </Pressable>
+      </View>
 
       <FlatList
         data={tabs}
@@ -294,11 +300,16 @@ export default function HomeScreen() {
         contentContainerStyle={tabs.length === 0 && !creatingNew ? styles.emptyContainer : undefined}
       />
       <View style={styles.bottomRow}>
-        <Pressable style={[styles.fab, styles.fabSecondary]} onPress={() => router.push('/join')}>
+        <Pressable
+          android_ripple={null}
+          style={({ pressed }) => [styles.fab, styles.fabSecondary, { opacity: pressed ? 0.7 : 1 }]}
+          onPress={() => router.push('/join')}
+        >
           <Text style={styles.fabSecondaryLabel}>Join Tab</Text>
         </Pressable>
         <Pressable
-          style={styles.fab}
+          android_ripple={null}
+          style={({ pressed }) => [styles.fab, { opacity: pressed ? 0.7 : 1 }]}
           onPress={() => setCreatingNew(true)}
           disabled={creatingNew}
         >
@@ -313,6 +324,42 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: DARK_BG },
   center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   emptyContainer: { flex: 1 },
+
+  // Nav bar
+  navBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 8,
+    paddingVertical: 8,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderColor: DARK_BORDER,
+  },
+  navBtn: { padding: 6 },
+  navTitle: { flex: 1, textAlign: 'center', fontSize: 17, fontWeight: '600', color: '#fff' },
+  clearedBtn: {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 6,
+    backgroundColor: DARK_BORDER,
+  },
+  clearedBtnLabel: { fontSize: 13, color: '#8e8e93' },
+
+  // Dropdown menu
+  menuOverlay: { flex: 1 },
+  menuDropdown: {
+    position: 'absolute',
+    left: 12,
+    backgroundColor: DARK_CARD,
+    borderRadius: 10,
+    minWidth: 150,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.5,
+    shadowRadius: 8,
+    elevation: 8,
+  },
+  menuItem: { paddingVertical: 14, paddingHorizontal: 16 },
+  menuItemSignOut: { fontSize: 15, color: '#ff453a' },
 
   row: {
     padding: 16,
@@ -342,36 +389,6 @@ const styles = StyleSheet.create({
     padding: 0,
     marginBottom: 8,
   },
-  // Header
-  headerMenuBtn: { paddingHorizontal: 12, paddingVertical: 6 },
-  headerMenuCaret: { fontSize: 18, color: '#fff', fontWeight: '600' },
-  headerTitleRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
-  headerTitleText: { fontSize: 17, fontWeight: '600', color: '#fff' },
-  clearedBtn: {
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 6,
-    backgroundColor: DARK_BORDER,
-  },
-  clearedBtnLabel: { fontSize: 13, color: '#8e8e93' },
-
-  // Dropdown menu
-  menuOverlay: { flex: 1 },
-  menuDropdown: {
-    position: 'absolute',
-    top: 90,
-    left: 12,
-    backgroundColor: DARK_CARD,
-    borderRadius: 10,
-    minWidth: 150,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.5,
-    shadowRadius: 8,
-    elevation: 8,
-  },
-  menuItem: { paddingVertical: 14, paddingHorizontal: 16 },
-  menuItemSignOut: { fontSize: 15, color: '#ff453a' },
 
   bottomRow: {
     flexDirection: 'row',

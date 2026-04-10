@@ -106,11 +106,11 @@ export default function RootLayout() {
         <Stack.Screen name="profile-setup" options={{ headerShown: false }} />
 
         {/* App screens */}
-        <Stack.Screen name="index" options={{ title: 'My Tabs', headerBackVisible: false, gestureEnabled: false, headerTitleAlign: 'center' }} />
+        <Stack.Screen name="index" options={{ headerShown: false, gestureEnabled: false }} />
         <Stack.Screen name="create-tab" options={{ title: 'New Tab' }} />
         <Stack.Screen name="join" options={{ title: 'Join a Tab' }} />
         <Stack.Screen name="cleared-tabs" options={{ title: 'Cleared Tabs' }} />
-        <Stack.Screen name="tab/[id]/index" options={{ title: 'Tab' }} />
+        <Stack.Screen name="tab/[id]/index" options={{ headerShown: false }} />
         <Stack.Screen name="tab/[id]/add-expense" options={{ title: 'Add Expense' }} />
       </Stack>
     </GestureHandlerRootView>
