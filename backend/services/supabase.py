@@ -4,13 +4,14 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-_client: Client | None = None
-
 
 def get_supabase() -> Client:
-    global _client
-    if _client is None:
-        url = os.environ["SUPABASE_URL"]
-        key = os.environ["SUPABASE_API_KEY"]
-        _client = create_client(url, key)
-    return _client
+    """Return a fresh Supabase client per call.
+
+    No singleton: avoids stale keep-alive connections (httpx RemoteProtocolError)
+    that occur when the server closes an idle connection before we reuse it.
+    Client creation is cheap — just object instantiation.
+    """
+    url = os.environ["SUPABASE_URL"]
+    key = os.environ["SUPABASE_API_KEY"]
+    return create_client(url, key)
