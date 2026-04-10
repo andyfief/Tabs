@@ -5,6 +5,7 @@ from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 from routers import tabs, expenses, users, invites, settlements
 from routers.tabs import run_cleanup_loop
+from fastapi.middleware.cors import CORSMiddleware
 
 logger = logging.getLogger("uvicorn.error")
 
@@ -21,6 +22,13 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(title="Tabs API", lifespan=lifespan)
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # tighten this later for prod
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 app.include_router(tabs.router)
 app.include_router(expenses.router)
 app.include_router(users.router)
