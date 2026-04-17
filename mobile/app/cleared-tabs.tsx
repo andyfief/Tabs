@@ -1,4 +1,3 @@
-import { useCallback } from 'react';
 import {
   ActivityIndicator,
   FlatList,
@@ -10,9 +9,8 @@ import {
 import { SwipeToActionRow } from '../components/SwipeToActionRow';
 import { useRouter } from 'expo-router';
 import { useQuery } from '@tanstack/react-query';
-import { apiFetch } from '../utils/api';
-import { queryClient } from '../utils/queryClient';
 import { Tab, fetchAllTabs } from '../utils/tabQueries';
+import { useRestoreTab } from '../hooks/useTabMutations';
 
 const DARK_BG = '#1c1c1e';
 const DARK_CARD = '#2c2c2e';
@@ -58,6 +56,7 @@ function ClearedTabRow({ item, onPress, onAction, onCommit }: TabRowProps) {
 
 export default function ClearedTabsScreen() {
   const router = useRouter();
+  const restoreTab = useRestoreTab();
 
   const { data: allTabs = [], isLoading, error } = useQuery({
     queryKey: ['tabs'],
@@ -65,20 +64,6 @@ export default function ClearedTabsScreen() {
   });
 
   const tabs = allTabs.filter((t) => t.is_cleared);
-
-  const handleRestoreAction = useCallback((tabId: string) => {
-    apiFetch(`/tabs/${tabId}/clear`, { method: 'PATCH' }).catch(() => {
-      queryClient.setQueryData<Tab[]>(['tabs'], (prev = []) =>
-        prev.map((t) => t.id === tabId ? { ...t, is_cleared: true } : t)
-      );
-    });
-  }, []);
-
-  const handleRestoreCommit = useCallback((tabId: string) => {
-    queryClient.setQueryData<Tab[]>(['tabs'], (prev = []) =>
-      prev.map((t) => t.id === tabId ? { ...t, is_cleared: false } : t)
-    );
-  }, []);
 
   if (isLoading) {
     return <View style={styles.center}><ActivityIndicator color="#fff" /></View>;
@@ -101,8 +86,8 @@ export default function ClearedTabsScreen() {
           <ClearedTabRow
             item={item}
             onPress={() => router.push(`/tab/${item.id}`)}
-            onAction={handleRestoreAction}
-            onCommit={handleRestoreCommit}
+            onAction={restoreTab.mutate}
+            onCommit={restoreTab.commit}
           />
         )}
         ListEmptyComponent={
