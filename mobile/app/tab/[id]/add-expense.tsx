@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import {
+  ActivityIndicator,
   Alert,
   Pressable,
   ScrollView,
@@ -10,11 +11,10 @@ import {
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useQuery } from '@tanstack/react-query';
-import { apiFetch } from '../../../utils/api';
-import { queryClient } from '../../../utils/queryClient';
 import { fetchTabDetail } from '../../../utils/tabQueries';
-import type { Expense, Member, TabDetailFull } from '../../../utils/tabQueries';
+import type { Member } from '../../../utils/tabQueries';
 import { HARDCODED_USER_ID } from '../../../utils/constants';
+import { useAddExpense } from '../../../hooks/useTabMutations';
 
 const DARK_BG = '#1c1c1e';
 const DARK_CARD = '#2c2c2e';
@@ -23,6 +23,7 @@ const DARK_BORDER = '#3a3a3c';
 export default function AddExpenseScreen() {
   const { id: tabId } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
+  const addExpense = useAddExpense(tabId!);
 
   // Reuse the same cache entry as the tab detail screen — no extra fetch needed.
   const { data, isLoading } = useQuery({
@@ -57,52 +58,25 @@ export default function AddExpenseScreen() {
     });
   }
 
-  async function handleSubmit() {
+  function handleSubmit() {
     const parsedAmount = parseFloat(amount);
     if (!title.trim()) { setError('Title is required.'); return; }
     if (isNaN(parsedAmount) || parsedAmount <= 0) { setError('Enter a valid amount.'); return; }
     if (splitIds.size === 0) { setError('Select at least one member for the split.'); return; }
-
     setError(null);
-
-    // Inject an optimistic expense into the cache so it appears immediately on the tab screen.
-    const tempId = `temp-expense-${Date.now()}`;
     const payerName = members.find((m) => m.user_id === payerId)?.display_name ?? '';
-    const optimistic: Expense = {
-      id: tempId,
-      title: title.trim(),
-      amount: parsedAmount,
-      payer_name: payerName,
-      created_at: new Date().toISOString(),
-      removed_at: null,
-    };
-    queryClient.setQueryData<TabDetailFull>(['tab', tabId], (old) => {
-      if (!old) return old;
-      return { ...old, expenses: [optimistic, ...old.expenses] };
-    });
-
+    addExpense.mutate(
+      {
+        title: title.trim(),
+        amount: parsedAmount,
+        payerId,
+        splitMemberIds: Array.from(splitIds),
+        tempId: `temp-expense-${Date.now()}`,
+        payerName,
+      },
+      { onError: (e) => Alert.alert('Error', e instanceof Error ? e.message : 'Could not add expense.') }
+    );
     router.back();
-
-    // POST in the background; invalidate on success so balances update from the view.
-    try {
-      await apiFetch(`/tabs/${tabId}/expenses`, {
-        method: 'POST',
-        body: JSON.stringify({
-          title: title.trim(),
-          amount: parsedAmount,
-          payer_id: payerId,
-          split_member_ids: Array.from(splitIds),
-        }),
-      });
-      queryClient.invalidateQueries({ queryKey: ['tab', tabId] });
-    } catch (e: unknown) {
-      // Roll back the optimistic expense and tell the user.
-      queryClient.setQueryData<TabDetailFull>(['tab', tabId], (old) => {
-        if (!old) return old;
-        return { ...old, expenses: old.expenses.filter((ex) => ex.id !== tempId) };
-      });
-      Alert.alert('Error', e instanceof Error ? e.message : 'Could not add expense.');
-    }
   }
 
   if (isLoading) {

@@ -16,10 +16,10 @@ import { useFocusEffect, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useQuery } from '@tanstack/react-query';
-import { apiFetch } from '../utils/api';
 import { supabase } from '../utils/supabase';
 import { queryClient } from '../utils/queryClient';
 import { Tab, fetchAllTabs, fetchTabDetail } from '../utils/tabQueries';
+import { useCreateTab, useClearTab } from '../hooks/useTabMutations';
 
 const DARK_BG = '#1c1c1e';
 const DARK_CARD = '#2c2c2e';
@@ -114,11 +114,12 @@ export default function HomeScreen() {
   const insets = useSafeAreaInsets();
   const [menuOpen, setMenuOpen] = useState(false);
   const [creatingNew, setCreatingNew] = useState(false);
+  const createTab = useCreateTab();
+  const clearTab = useClearTab();
 
   const { data: allTabs = [], isLoading, error } = useQuery({
     queryKey: ['tabs'],
     queryFn: fetchAllTabs,
-    staleTime: 30_000,
   });
 
   // On return to this screen, revalidate only if the cached list is actually stale.
@@ -147,7 +148,6 @@ export default function HomeScreen() {
             queryClient.prefetchQuery({
               queryKey: ['tab', tab.id],
               queryFn: () => fetchTabDetail(tab.id),
-              staleTime: 30_000,
             });
           }
         }
@@ -160,62 +160,11 @@ export default function HomeScreen() {
     itemVisiblePercentThreshold: 50,
   }).current;
 
-  const handleClearAction = useCallback((tabId: string) => {
-    // Start the API call immediately; if it fails after the row is gone, revert.
-    apiFetch(`/tabs/${tabId}/clear`, { method: 'PATCH' }).catch(() => {
-      queryClient.setQueryData<Tab[]>(['tabs'], (prev = []) =>
-        prev.map((t) => t.id === tabId ? { ...t, is_cleared: false } : t)
-      );
-    });
-  }, []);
-
-  const handleClearCommit = useCallback((tabId: string) => {
-    queryClient.setQueryData<Tab[]>(['tabs'], (prev = []) =>
-      prev.map((t) => t.id === tabId ? { ...t, is_cleared: true } : t)
-    );
-  }, []);
-
-  async function handleCreateTab(name: string) {
+  function handleCreateTab(name: string) {
     const tempId = `temp-${Date.now()}`;
-
-    // Seed the tabs list so the row appears immediately
-    queryClient.setQueryData<Tab[]>(['tabs'], (prev = []) => [
-      ...prev,
-      { id: tempId, name, description: null, member_count: 1, created_at: new Date().toISOString(), is_cleared: false },
-    ]);
-
-    // Seed the tab detail so the screen opens with no spinner
-    queryClient.setQueryData(['tab', tempId], {
-      tab: { id: tempId, name, description: null, status: 'open', members: [], links_unlocked: false },
-      expenses: [],
-      balances: [],
-      settlements: [],
-    });
-
+    createTab.mutate({ name, tempId }, { onError: () => router.back() });
     setCreatingNew(false);
     router.push(`/tab/${tempId}`);
-
-    try {
-      const created = await apiFetch<{ id: string; created_at: string }>('/tabs', {
-        method: 'POST',
-        body: JSON.stringify({ name }),
-      });
-
-      // Seed real-ID cache before signalling the tab screen
-      queryClient.setQueryData(['tab', created.id], queryClient.getQueryData(['tab', tempId]));
-
-      queryClient.setQueryData<Tab[]>(['tabs'], (prev = []) =>
-        prev.map((t) => t.id === tempId ? { ...t, id: created.id, created_at: created.created_at } : t)
-      );
-
-      // Signal the tab screen to silently swap its ID param (no navigation animation)
-      queryClient.setQueryData(['tab-resolve', tempId], created.id);
-    } catch {
-      // Rollback optimistic entries and return home
-      queryClient.setQueryData<Tab[]>(['tabs'], (prev = []) => prev.filter((t) => t.id !== tempId));
-      queryClient.removeQueries({ queryKey: ['tab', tempId] });
-      router.back();
-    }
   }
 
   if (isLoading) return <View style={styles.center}><ActivityIndicator color="#fff" /></View>;
@@ -278,8 +227,8 @@ export default function HomeScreen() {
           <TabRow
             item={item}
             onPress={() => router.push(`/tab/${item.id}`)}
-            onAction={handleClearAction}
-            onCommit={handleClearCommit}
+            onAction={clearTab.mutate}
+            onCommit={clearTab.commit}
           />
         )}
         ListFooterComponent={

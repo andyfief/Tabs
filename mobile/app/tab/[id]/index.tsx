@@ -23,6 +23,13 @@ import { fetchTabDetail } from '../../../utils/tabQueries';
 import { buildVenmoLink, buildCashAppLink } from '../../../utils/paymentLinks';
 import type { Expense, Tab, TabDetailFull, BalanceSettlement } from '../../../utils/tabQueries';
 import { useSession } from '../../../hooks/useSession';
+import {
+  useToggleExpense,
+  useUnlockLinks,
+  useCreateSettlement,
+  useRestoreSettlement,
+  useReSettleBalance,
+} from '../../../hooks/useTabMutations';
 
 const DARK_BG = '#1c1c1e';
 const DARK_CARD = '#2c2c2e';
@@ -213,8 +220,13 @@ export default function TabDetailScreen() {
     queryKey: ['tab', id],
     queryFn: () => fetchTabDetail(id!),
     enabled: !!id && !isTemp,
-    staleTime: 30_000,
   });
+
+  const toggleExpense = useToggleExpense(id!);
+  const unlockLinks = useUnlockLinks(id!);
+  const createSettlement = useCreateSettlement(id!);
+  const restoreSettlement = useRestoreSettlement(id!);
+  const reSettleBalance = useReSettleBalance(id!);
 
   // Watch for the POST to resolve the temp ID, then silently swap the route param in-place.
   // router.setParams updates the URL without triggering a navigation animation.
@@ -234,13 +246,7 @@ export default function TabDetailScreen() {
     });
   }, [id, isTemp, router]);
 
-  // links_unlocked is one-way: once true from the server it stays true.
-  // Local state lets us optimistically flip it without a full refetch.
-  const serverLinksUnlocked = data?.tab.links_unlocked ?? false;
-  const [linksUnlocked, setLinksUnlocked] = useState(serverLinksUnlocked);
-  useEffect(() => {
-    if (serverLinksUnlocked) setLinksUnlocked(true);
-  }, [serverLinksUnlocked]);
+  const linksUnlocked = data?.tab.links_unlocked ?? false;
 
   const handleShowInvite = useCallback(async () => {
     try {
@@ -327,47 +333,17 @@ export default function TabDetailScreen() {
     refetch();
   }, [refetch]);
 
-  // Optimistic toggle: update the cache immediately, then sync from the server.
-  const handleToggleExpense = useCallback(async (expenseId: string) => {
-    const now = new Date().toISOString();
+  const handleToggleExpense = useCallback(
+    (expenseId: string) => toggleExpense.mutate(expenseId),
+    [toggleExpense]
+  );
 
-    queryClient.setQueryData<TabDetailFull>(['tab', id], (old) => {
-      if (!old) return old;
-      const toggled = old.expenses.map((e) =>
-        e.id === expenseId
-          ? { ...e, removed_at: e.removed_at === null ? now : null }
-          : e
-      );
-      const active = toggled
-        .filter((e) => e.removed_at === null)
-        .sort((a, b) => b.created_at.localeCompare(a.created_at));
-      const removed = toggled
-        .filter((e) => e.removed_at !== null)
-        .sort((a, b) => b.removed_at!.localeCompare(a.removed_at!));
-      return { ...old, expenses: [...active, ...removed] };
-    });
+  const handleUnlock = useCallback(
+    () => unlockLinks.mutate(),
+    [unlockLinks]
+  );
 
-    try {
-      await apiFetch(`/tabs/${id}/expenses/${expenseId}`, { method: 'PATCH' });
-      queryClient.invalidateQueries({ queryKey: ['tab', id] });
-    } catch {
-      queryClient.invalidateQueries({ queryKey: ['tab', id] });
-    }
-  }, [id]);
-
-  // ── Balance link unlock ───────────────────────────────────
-  const handleUnlock = useCallback(async () => {
-    setLinksUnlocked(true);
-    try {
-      await apiFetch(`/tabs/${id}/unlock-balance-links`, { method: 'POST' });
-    } catch {
-      setLinksUnlocked(false);
-      Alert.alert('Error', 'Could not unlock balance links.');
-    }
-  }, [id]);
-
-  // ── Settle a balance (open payment link + record settlement) ─
-  const handleSettle = useCallback(async (
+  const handleSettle = useCallback((
     counterpartId: string,
     counterpartName: string,
     amount: number,
@@ -379,83 +355,32 @@ export default function TabDetailScreen() {
     const url = platform === 'venmo'
       ? buildVenmoLink(handle, amount, tabName)
       : buildCashAppLink(handle, amount, tabName);
-
     Linking.openURL(url).catch(() =>
       Alert.alert('Error', `Could not open ${platform === 'venmo' ? 'Venmo' : 'Cash App'}.`)
     );
-
-    // Optimistically add settlement to cache.
-    const tempId = `temp-${Date.now()}`;
-    const members = data?.tab.members ?? [];
-    const myName = members.find((m) => m.user_id === userId)?.display_name ?? '';
-    const optimistic: BalanceSettlement = {
-      id: tempId,
-      initiator_id: userId ?? '',
-      initiator_name: myName,
-      counterpart_id: counterpartId,
-      counterpart_name: counterpartName,
+    const myName = data?.tab.members.find((m) => m.user_id === userId)?.display_name ?? '';
+    createSettlement.mutate({
+      counterpartId,
+      counterpartName,
       amount,
-      i_owe: iOwe,
-      settled_at: new Date().toISOString(),
-      restored_at: null,
-    };
-    queryClient.setQueryData<TabDetailFull>(['tab', id], (old) => {
-      if (!old) return old;
-      return { ...old, settlements: [...old.settlements, optimistic] };
+      iOwe,
+      initiatorId: userId ?? '',
+      initiatorName: myName,
+      tempId: `temp-${Date.now()}`,
     });
+  }, [data?.tab.name, data?.tab.members, userId, createSettlement]);
 
-    try {
-      const result = await apiFetch<BalanceSettlement>(`/tabs/${id}/balance-settlements`, {
-        method: 'POST',
-        body: JSON.stringify({ counterpart_id: counterpartId, amount, i_owe: iOwe }),
-      });
-      queryClient.setQueryData<TabDetailFull>(['tab', id], (old) => {
-        if (!old) return old;
-        return {
-          ...old,
-          settlements: old.settlements.map((s) => (s.id === tempId ? result : s)),
-        };
-      });
-    } catch {
-      queryClient.setQueryData<TabDetailFull>(['tab', id], (old) => {
-        if (!old) return old;
-        return { ...old, settlements: old.settlements.filter((s) => s.id !== tempId) };
-      });
-    }
-  }, [id, data?.tab.name, data?.tab.members, userId]);
+  const handleRestoreAction = useCallback(
+    (settlementId: string) => restoreSettlement.mutate(settlementId),
+    [restoreSettlement]
+  );
 
-  // ── Restore a settled balance (swipe action on settled rows) ─
-  const handleRestoreAction = useCallback((settlementId: string) => {
-    apiFetch(`/tabs/${id}/balance-settlements/${settlementId}/restore`, { method: 'PATCH' })
-      .catch(() => {
-        queryClient.setQueryData<TabDetailFull>(['tab', id], (old) => {
-          if (!old) return old;
-          return {
-            ...old,
-            settlements: old.settlements.map((s) =>
-              s.id === settlementId ? { ...s, restored_at: null } : s
-            ),
-          };
-        });
-      });
-  }, [id]);
+  const handleRestoreCommit = useCallback(
+    (settlementId: string) => restoreSettlement.commit(settlementId),
+    [restoreSettlement]
+  );
 
-  const handleRestoreCommit = useCallback((settlementId: string) => {
-    const now = new Date().toISOString();
-    queryClient.setQueryData<TabDetailFull>(['tab', id], (old) => {
-      if (!old) return old;
-      return {
-        ...old,
-        settlements: old.settlements.map((s) =>
-          s.id === settlementId ? { ...s, restored_at: now } : s
-        ),
-      };
-    });
-  }, [id]);
-
-  // ── Re-settle a previously-restored balance (payment click on "previously settled" rows) ─
-  // Clears restored_at → moves the row back to the settled section without creating a new record.
-  const handleReSettle = useCallback(async (
+  const handleReSettle = useCallback((
     settlementId: string,
     amount: number,
     platform: 'venmo' | 'cashapp',
@@ -465,38 +390,11 @@ export default function TabDetailScreen() {
     const url = platform === 'venmo'
       ? buildVenmoLink(handle, amount, tabName)
       : buildCashAppLink(handle, amount, tabName);
-
     Linking.openURL(url).catch(() =>
       Alert.alert('Error', `Could not open ${platform === 'venmo' ? 'Venmo' : 'Cash App'}.`)
     );
-
-    // Optimistically clear restored_at (moves row back to settled section).
-    queryClient.setQueryData<TabDetailFull>(['tab', id], (old) => {
-      if (!old) return old;
-      return {
-        ...old,
-        settlements: old.settlements.map((s) =>
-          s.id === settlementId ? { ...s, restored_at: null } : s
-        ),
-      };
-    });
-
-    try {
-      await apiFetch(`/tabs/${id}/balance-settlements/${settlementId}/resettle`, { method: 'PATCH' });
-    } catch {
-      // Revert: put it back in the active section.
-      const now = new Date().toISOString();
-      queryClient.setQueryData<TabDetailFull>(['tab', id], (old) => {
-        if (!old) return old;
-        return {
-          ...old,
-          settlements: old.settlements.map((s) =>
-            s.id === settlementId ? { ...s, restored_at: now } : s
-          ),
-        };
-      });
-    }
-  }, [id, data?.tab.name]);
+    reSettleBalance.mutate(settlementId);
+  }, [data?.tab.name, reSettleBalance]);
 
   // ── Loading / error states ────────────────────────────────
 
