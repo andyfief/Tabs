@@ -107,11 +107,11 @@ export default function RootLayout() {
 
         {/* App screens */}
         <Stack.Screen name="index" options={{ headerShown: false, gestureEnabled: false }} />
-        <Stack.Screen name="create-tab" options={{ title: 'New Tab' }} />
-        <Stack.Screen name="join" options={{ title: 'Join a Tab' }} />
-        <Stack.Screen name="cleared-tabs" options={{ title: 'Cleared Tabs' }} />
+        <Stack.Screen name="create-tab" options={{ headerShown: false }} />
+        <Stack.Screen name="join" options={{ headerShown: false }} />
+        <Stack.Screen name="cleared-tabs" options={{ headerShown: false }} />
         <Stack.Screen name="tab/[id]/index" options={{ headerShown: false }} />
-        <Stack.Screen name="tab/[id]/add-expense" options={{ title: 'Add Expense' }} />
+        <Stack.Screen name="tab/[id]/add-expense" options={{ headerShown: false }} />
       </Stack>
     </GestureHandlerRootView>
     </AuthContext.Provider>

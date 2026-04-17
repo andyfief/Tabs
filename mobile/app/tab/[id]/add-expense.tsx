@@ -10,6 +10,8 @@ import {
   View,
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
+import { Ionicons } from '@expo/vector-icons';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useQuery } from '@tanstack/react-query';
 import { fetchTabDetail } from '../../../utils/tabQueries';
 import type { Member } from '../../../utils/tabQueries';
@@ -23,6 +25,7 @@ const DARK_BORDER = '#3a3a3c';
 export default function AddExpenseScreen() {
   const { id: tabId } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
+  const insets = useSafeAreaInsets();
   const addExpense = useAddExpense(tabId!);
 
   // Reuse the same cache entry as the tab detail screen — no extra fetch needed.
@@ -88,6 +91,18 @@ export default function AddExpenseScreen() {
   }
 
   return (
+    <View style={{ flex: 1, backgroundColor: DARK_BG, paddingTop: insets.top }}>
+      <View style={styles.navBar}>
+        <Pressable
+          onPress={() => router.back()}
+          android_ripple={null}
+          style={({ pressed }) => [styles.navBtn, { opacity: pressed ? 0.6 : 1 }]}
+        >
+          <Ionicons name="chevron-back" size={24} color="#fff" />
+        </Pressable>
+        <Text style={styles.navTitle}>Add Expense</Text>
+        <View style={styles.navBtn} />
+      </View>
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
       {/* Title */}
       <Text style={styles.label}>Title *</Text>
@@ -155,6 +170,7 @@ export default function AddExpenseScreen() {
         <Text style={styles.submitLabel}>Add Expense</Text>
       </Pressable>
     </ScrollView>
+    </View>
   );
 }
 
@@ -162,6 +178,17 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: DARK_BG },
   content: { padding: 16, paddingBottom: 40 },
   center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
+
+  navBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 8,
+    paddingVertical: 8,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderColor: DARK_BORDER,
+  },
+  navBtn: { padding: 6 },
+  navTitle: { flex: 1, textAlign: 'center', fontSize: 17, fontWeight: '600', color: '#fff' },
 
   label: { fontSize: 13, fontWeight: '600', color: '#8e8e93', marginTop: 20, marginBottom: 6 },
   input: {

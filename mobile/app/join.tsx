@@ -10,6 +10,8 @@ import {
   View,
 } from 'react-native';
 import { useRouter } from 'expo-router';
+import { Ionicons } from '@expo/vector-icons';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { apiFetch } from '../utils/api';
 
 const DARK_BG = '#1c1c1e';
@@ -19,6 +21,7 @@ type JoinResponse = { tab_id: string; tab_name: string };
 
 export default function JoinScreen() {
   const router = useRouter();
+  const insets = useSafeAreaInsets();
   const [code, setCode] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -45,11 +48,22 @@ export default function JoinScreen() {
 
   return (
     <KeyboardAvoidingView
-      style={styles.container}
+      style={[styles.container, { paddingTop: insets.top }]}
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
     >
+      <View style={styles.navBar}>
+        <Pressable
+          onPress={() => router.back()}
+          android_ripple={null}
+          style={({ pressed }) => [styles.navBtn, { opacity: pressed ? 0.6 : 1 }]}
+        >
+          <Ionicons name="chevron-back" size={24} color="#fff" />
+        </Pressable>
+        <Text style={styles.navTitle}>Join a Tab</Text>
+        <View style={styles.navBtn} />
+      </View>
+
       <View style={styles.inner}>
-        <Text style={styles.title}>Join a Tab</Text>
         <Text style={styles.subtitle}>
           Enter the invite code shared by the tab creator.
         </Text>
@@ -77,8 +91,19 @@ export default function JoinScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: DARK_BG },
+
+  navBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 8,
+    paddingVertical: 8,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderColor: DARK_BORDER,
+  },
+  navBtn: { padding: 6 },
+  navTitle: { flex: 1, textAlign: 'center', fontSize: 17, fontWeight: '600', color: '#fff' },
+
   inner: { flex: 1, justifyContent: 'center', padding: 28 },
-  title: { fontSize: 26, fontWeight: '700', marginBottom: 8, color: '#fff' },
   subtitle: { fontSize: 15, color: '#8e8e93', marginBottom: 32 },
   input: {
     borderWidth: 1, borderColor: DARK_BORDER, borderRadius: 6,

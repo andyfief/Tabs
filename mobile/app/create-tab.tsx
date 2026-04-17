@@ -8,6 +8,8 @@ import {
   View,
 } from 'react-native';
 import { useRouter } from 'expo-router';
+import { Ionicons } from '@expo/vector-icons';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { apiFetch } from '../utils/api';
 
 const DARK_BG = '#1c1c1e';
@@ -17,6 +19,7 @@ type TabResponse = { id: string };
 
 export default function CreateTabScreen() {
   const router = useRouter();
+  const insets = useSafeAreaInsets();
   const [name, setName] = useState('');
 
   const [loading, setLoading] = useState(false);
@@ -43,31 +46,58 @@ export default function CreateTabScreen() {
   }
 
   return (
-    <View style={styles.container}>
-      <Text style={styles.label}>Name *</Text>
-      <TextInput
-        style={styles.input}
-        placeholder="e.g. Bar crawl"
-        placeholderTextColor="#555"
-        value={name}
-        onChangeText={setName}
-      />
+    <View style={[styles.container, { paddingTop: insets.top }]}>
+      <View style={styles.navBar}>
+        <Pressable
+          onPress={() => router.back()}
+          android_ripple={null}
+          style={({ pressed }) => [styles.navBtn, { opacity: pressed ? 0.6 : 1 }]}
+        >
+          <Ionicons name="chevron-back" size={24} color="#fff" />
+        </Pressable>
+        <Text style={styles.navTitle}>New Tab</Text>
+        <View style={styles.navBtn} />
+      </View>
 
-      {error ? <Text style={styles.error}>{error}</Text> : null}
+      <View style={styles.content}>
+        <Text style={styles.label}>Name *</Text>
+        <TextInput
+          style={styles.input}
+          placeholder="e.g. Bar crawl"
+          placeholderTextColor="#555"
+          value={name}
+          onChangeText={setName}
+        />
 
-      <Pressable style={styles.button} onPress={handleCreate} disabled={loading}>
-        {loading ? (
-          <ActivityIndicator color="#fff" />
-        ) : (
-          <Text style={styles.buttonLabel}>Create Tab</Text>
-        )}
-      </Pressable>
+        {error ? <Text style={styles.error}>{error}</Text> : null}
+
+        <Pressable style={styles.button} onPress={handleCreate} disabled={loading}>
+          {loading ? (
+            <ActivityIndicator color="#fff" />
+          ) : (
+            <Text style={styles.buttonLabel}>Create Tab</Text>
+          )}
+        </Pressable>
+      </View>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, padding: 16, backgroundColor: DARK_BG },
+  container: { flex: 1, backgroundColor: DARK_BG },
+
+  navBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 8,
+    paddingVertical: 8,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderColor: DARK_BORDER,
+  },
+  navBtn: { padding: 6 },
+  navTitle: { flex: 1, textAlign: 'center', fontSize: 17, fontWeight: '600', color: '#fff' },
+
+  content: { flex: 1, padding: 16 },
   label: { fontSize: 13, fontWeight: '600', color: '#8e8e93', marginBottom: 4, marginTop: 16 },
   input: {
     borderWidth: 1,

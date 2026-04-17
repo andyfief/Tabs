@@ -8,6 +8,8 @@ import {
 } from 'react-native';
 import { SwipeToActionRow } from '../components/SwipeToActionRow';
 import { useRouter } from 'expo-router';
+import { Ionicons } from '@expo/vector-icons';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useQuery } from '@tanstack/react-query';
 import { Tab, fetchAllTabs } from '../utils/tabQueries';
 import { useRestoreTab } from '../hooks/useTabMutations';
@@ -56,6 +58,7 @@ function ClearedTabRow({ item, onPress, onAction, onCommit }: TabRowProps) {
 
 export default function ClearedTabsScreen() {
   const router = useRouter();
+  const insets = useSafeAreaInsets();
   const restoreTab = useRestoreTab();
 
   const { data: allTabs = [], isLoading, error } = useQuery({
@@ -78,7 +81,18 @@ export default function ClearedTabsScreen() {
   }
 
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, { paddingTop: insets.top }]}>
+      <View style={styles.navBar}>
+        <Pressable
+          onPress={() => router.back()}
+          android_ripple={null}
+          style={({ pressed }) => [styles.navBtn, { opacity: pressed ? 0.6 : 1 }]}
+        >
+          <Ionicons name="chevron-back" size={24} color="#fff" />
+        </Pressable>
+        <Text style={styles.navTitle}>Cleared Tabs</Text>
+        <View style={styles.navBtn} />
+      </View>
       <FlatList
         data={tabs}
         keyExtractor={(item) => item.id}
@@ -104,6 +118,17 @@ export default function ClearedTabsScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: DARK_BG },
   center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
+
+  navBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 8,
+    paddingVertical: 8,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderColor: DARK_BORDER,
+  },
+  navBtn: { padding: 6 },
+  navTitle: { flex: 1, textAlign: 'center', fontSize: 17, fontWeight: '600', color: '#fff' },
   emptyContainer: { flex: 1 },
 
   row: {
