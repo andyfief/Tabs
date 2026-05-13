@@ -22,7 +22,9 @@ export type Expense = {
   id: string;
   title: string;
   amount: number;
+  payer_id: string;
   payer_name: string;
+  split_member_ids: string[];
   created_at: string;
   removed_at: string | null;
 };

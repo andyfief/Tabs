@@ -202,6 +202,7 @@ export default function RootLayout() {
           <Stack.Screen name="cleared-tabs" options={{ headerShown: false }} />
           <Stack.Screen name="tab/[id]/index" options={{ headerShown: false }} />
           <Stack.Screen name="tab/[id]/add-expense" options={{ headerShown: false }} />
+          <Stack.Screen name="tab/[id]/edit-expense" options={{ headerShown: false }} />
         </Stack>
       )}
     </GestureHandlerRootView>

@@ -384,3 +384,60 @@ export function useAddExpense(tabId: string) {
     },
   });
 }
+
+// ─── useUpdateExpense ─────────────────────────────────────────────────────────
+// Replaces the matching expense in-place in cache (optimistic), then invalidates.
+
+type UpdateExpenseInput = {
+  expenseId: string;
+  title: string;
+  amount: number;
+  payerId: string;
+  payerName: string;
+  splitMemberIds: string[];
+};
+
+export function useUpdateExpense(tabId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (vars: UpdateExpenseInput) =>
+      apiFetch(`/tabs/${tabId}/expenses/${vars.expenseId}`, {
+        method: 'PUT',
+        body: JSON.stringify({
+          title: vars.title,
+          amount: vars.amount,
+          payer_id: vars.payerId,
+          split_member_ids: vars.splitMemberIds,
+        }),
+      }),
+    onMutate: (vars: UpdateExpenseInput) => {
+      queryClient.cancelQueries({ queryKey: tabKey(tabId) });
+      const previous = queryClient.getQueryData<TabDetailFull>(tabKey(tabId));
+      queryClient.setQueryData<TabDetailFull>(tabKey(tabId), (old) => {
+        if (!old) return old;
+        return {
+          ...old,
+          expenses: old.expenses.map((e) =>
+            e.id === vars.expenseId
+              ? {
+                  ...e,
+                  title: vars.title,
+                  amount: vars.amount,
+                  payer_id: vars.payerId,
+                  payer_name: vars.payerName,
+                  split_member_ids: vars.splitMemberIds,
+                }
+              : e
+          ),
+        };
+      });
+      return { previous };
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: tabKey(tabId) });
+    },
+    onError: (_err, _vars, ctx) => {
+      queryClient.setQueryData(tabKey(tabId), ctx?.previous);
+    },
+  });
+}

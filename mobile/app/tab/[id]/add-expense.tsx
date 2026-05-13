@@ -51,8 +51,6 @@ export default function AddExpenseScreen() {
     splitInitialized.current = true;
   }, [members]);
 
-  const [error, setError] = useState<string | null>(null);
-
   function toggleSplit(userId: string) {
     setSplitIds((prev) => {
       const next = new Set(prev);
@@ -61,12 +59,10 @@ export default function AddExpenseScreen() {
     });
   }
 
+  const parsedAmount = parseFloat(amount);
+  const canSubmit = !!title.trim() && !isNaN(parsedAmount) && parsedAmount > 0 && splitIds.size > 0;
+
   function handleSubmit() {
-    const parsedAmount = parseFloat(amount);
-    if (!title.trim()) { setError('Title is required.'); return; }
-    if (isNaN(parsedAmount) || parsedAmount <= 0) { setError('Enter a valid amount.'); return; }
-    if (splitIds.size === 0) { setError('Select at least one member for the split.'); return; }
-    setError(null);
     const payerName = members.find((m) => m.user_id === payerId)?.display_name ?? '';
     addExpense.mutate(
       {
@@ -112,7 +108,6 @@ export default function AddExpenseScreen() {
         placeholderTextColor="#555"
         value={title}
         onChangeText={setTitle}
-        autoFocus
       />
 
       {/* Amount */}
@@ -164,9 +159,10 @@ export default function AddExpenseScreen() {
         </ScrollView>
       </View>
 
-      {error ? <Text style={styles.error}>{error}</Text> : null}
-
-      <Pressable style={styles.submitBtn} onPress={handleSubmit}>
+      <Pressable
+        style={[styles.submitBtn, !canSubmit && styles.submitBtnDisabled]}
+        onPress={canSubmit ? handleSubmit : undefined}
+      >
         <Text style={styles.submitLabel}>Add Expense</Text>
       </Pressable>
     </ScrollView>
@@ -239,7 +235,6 @@ const styles = StyleSheet.create({
     backgroundColor: '#fff',
   },
 
-  error: { color: '#ff453a', fontSize: 13, marginTop: 14 },
   submitBtn: {
     marginTop: 28,
     padding: 14,
@@ -247,5 +242,6 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     alignItems: 'center',
   },
+  submitBtnDisabled: { opacity: 0.4 },
   submitLabel: { color: '#fff', fontWeight: '600', fontSize: 15 },
 });

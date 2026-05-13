@@ -1,7 +1,7 @@
 from datetime import datetime, timezone
 from decimal import Decimal, ROUND_DOWN
 from fastapi import APIRouter, Depends, HTTPException
-from models.expense import ExpenseCreate
+from models.expense import ExpenseCreate, ExpenseUpdate
 from services.supabase import get_supabase
 from services.auth import get_current_user
 
@@ -107,6 +107,18 @@ def list_expenses(tab_id: str, current_user: str = Depends(get_current_user)) ->
     )
     name_map = {row["id"]: row["display_name"] for row in users_res.data}
 
+    # Batch-fetch splits
+    expense_ids = [row["id"] for row in res.data]
+    splits_res = (
+        sb.table("expense_splits")
+        .select("expense_id, user_id")
+        .in_("expense_id", expense_ids)
+        .execute()
+    )
+    splits_map: dict[str, list[str]] = {}
+    for s in splits_res.data:
+        splits_map.setdefault(s["expense_id"], []).append(s["user_id"])
+
     active = [r for r in res.data if r["removed_at"] is None]
     removed = [r for r in res.data if r["removed_at"] is not None]
     active.sort(key=lambda r: r["created_at"], reverse=True)
@@ -121,6 +133,7 @@ def list_expenses(tab_id: str, current_user: str = Depends(get_current_user)) ->
             "removed_at": row["removed_at"],
             "payer_id": row["payer_id"],
             "payer_name": name_map.get(row["payer_id"], "Unknown"),
+            "split_member_ids": splits_map.get(row["id"], []),
         }
         for row in active + removed
     ]
@@ -151,6 +164,58 @@ def toggle_remove_expense(
 
     sb.table("expenses").update({"removed_at": new_value}).eq("id", expense_id).execute()
     return {"removed": not currently_removed}
+
+
+@router.put("/{expense_id}")
+def update_expense(
+    tab_id: str,
+    expense_id: str,
+    body: ExpenseUpdate,
+    current_user: str = Depends(get_current_user),
+) -> dict:
+    """Update an expense's title, amount, payer, and splits. Cannot edit a removed expense."""
+    sb = get_supabase()
+    _assert_member(sb, tab_id, current_user)
+
+    res = (
+        sb.table("expenses")
+        .select("id, removed_at")
+        .eq("id", expense_id)
+        .eq("tab_id", tab_id)
+        .execute()
+    )
+    if not res.data:
+        raise HTTPException(status_code=404, detail="Expense not found.")
+    if res.data[0]["removed_at"] is not None:
+        raise HTTPException(status_code=400, detail="Cannot edit a removed expense.")
+
+    members_res = (
+        sb.table("tab_members").select("user_id").eq("tab_id", tab_id).execute()
+    )
+    tab_member_ids = {row["user_id"] for row in members_res.data}
+
+    if body.payer_id not in tab_member_ids:
+        raise HTTPException(status_code=400, detail="Payer is not a member of this tab.")
+    for uid in body.split_member_ids:
+        if uid not in tab_member_ids:
+            raise HTTPException(
+                status_code=400, detail=f"Split member {uid} is not in this tab."
+            )
+
+    sb.table("expenses").update({
+        "title": body.title,
+        "amount": body.amount,
+        "payer_id": body.payer_id,
+    }).eq("id", expense_id).execute()
+
+    sb.table("expense_splits").delete().eq("expense_id", expense_id).execute()
+
+    splits = _even_splits(body.amount, body.split_member_ids)
+    for split in splits:
+        split["expense_id"] = expense_id
+    sb.table("expense_splits").insert(splits).execute()
+
+    return {"id": expense_id}
 
 
 @router.get("/balances")

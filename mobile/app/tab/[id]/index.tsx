@@ -86,39 +86,77 @@ function formatDate(iso: string): string {
   return new Date(iso).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
 }
 
+// ─── Split avatars ────────────────────────────────────────────
+
+function SplitAvatars({ count, removed, pressed }: { count: number; removed: boolean; pressed: boolean }) {
+  const visible = Math.min(count, 4);
+  const overflow = count - visible;
+  return (
+    <View style={styles.splitAvatarRow}>
+      {Array.from({ length: visible }).map((_, i) => (
+        <View key={i} style={[styles.splitAvatar, (removed || pressed) && styles.splitAvatarDimmed]} />
+      ))}
+      {overflow > 0 && (
+        <View style={[styles.splitAvatar, styles.splitAvatarOverflow, (removed || pressed) && styles.splitAvatarDimmed]}>
+          <Text style={styles.splitAvatarOverflowText}>+{overflow}</Text>
+        </View>
+      )}
+    </View>
+  );
+}
+
 // ─── Expense row ─────────────────────────────────────────────
 
 type ExpenseRowProps = {
   item: Expense;
+  isOpen: boolean;
+  onOpen: () => void;
+  onClose: () => void;
   onToggle: (id: string) => void;
+  onPress: () => void;
 };
 
-function ExpenseRow({ item, onToggle }: ExpenseRowProps) {
+function ExpenseRow({ item, isOpen, onOpen, onClose, onToggle, onPress }: ExpenseRowProps) {
   const removed = item.removed_at !== null;
 
   return (
     <SwipeToActionRow
-      label={removed ? 'Restore' : 'Remove'}
-      activeColor={removed ? '#30d158' : '#c0392b'}
-      dimColor={removed ? '#0d2a15' : '#2a0d0d'}
-      disappears={false}
-      onAction={() => onToggle(item.id)}
-      onCommit={() => {}}
+      isOpen={isOpen}
+      onOpen={onOpen}
+      onClose={onClose}
+      renderActions={() => (
+        <Pressable
+          style={[styles.actionBtn, { backgroundColor: removed ? '#30d158' : '#c0392b' }]}
+          onPress={() => { onToggle(item.id); onClose(); }}
+        >
+          <Text style={styles.actionBtnLabel}>{removed ? 'Restore' : 'Remove'}</Text>
+        </Pressable>
+      )}
     >
-      <View style={[styles.expenseRow, removed && styles.expenseRowRemoved]}>
-        <View style={styles.expenseLeft}>
-          <Text style={[styles.expenseTitle, removed && styles.textRemoved]}>
-            {item.title}
-          </Text>
-          <Text style={[styles.expenseMeta, removed && styles.textRemoved]}>
-            Paid by {item.payer_name} · {formatDate(item.created_at)}
-            {removed ? '  · removed' : ''}
-          </Text>
-        </View>
-        <Text style={[styles.expenseAmount, removed && styles.textRemoved]}>
-          ${item.amount.toFixed(2)}
-        </Text>
-      </View>
+      <Pressable
+        android_ripple={null}
+        style={[styles.expenseRow, removed && styles.expenseRowRemoved]}
+        onPress={isOpen ? onClose : onPress}
+      >
+        {({ pressed }) => (
+          <>
+            <View style={styles.expenseLeft}>
+              <Text style={[styles.expenseTitle, removed && styles.textRemoved, pressed && styles.textPressed]}>
+                {item.title}
+              </Text>
+              <View style={styles.expenseMetaRow}>
+                <Text style={[styles.expenseMeta, removed && styles.textRemoved, pressed && styles.textPressed]}>
+                  Paid by {item.payer_name}{removed ? '  · removed' : ''}
+                </Text>
+                <SplitAvatars count={item.split_member_ids.length} removed={removed} pressed={pressed} />
+              </View>
+            </View>
+            <Text style={[styles.expenseAmount, removed && styles.textRemoved, pressed && styles.textPressed]}>
+              ${item.amount.toFixed(2)}
+            </Text>
+          </>
+        )}
+      </Pressable>
     </SwipeToActionRow>
   );
 }
@@ -174,19 +212,26 @@ function PaymentIcons({
 
 type SettledRowProps = {
   item: BalanceSettlement;
+  isOpen: boolean;
+  onOpen: () => void;
+  onClose: () => void;
   onAction: (id: string) => void;
-  onCommit: (id: string) => void;
 };
 
-function SettledRow({ item, onAction, onCommit }: SettledRowProps) {
+function SettledRow({ item, isOpen, onOpen, onClose, onAction }: SettledRowProps) {
   return (
     <SwipeToActionRow
-      label="Restore"
-      activeColor="#30d158"
-      dimColor="#0d2a15"
-      disappears={true}
-      onAction={() => onAction(item.id)}
-      onCommit={() => onCommit(item.id)}
+      isOpen={isOpen}
+      onOpen={onOpen}
+      onClose={onClose}
+      renderActions={() => (
+        <Pressable
+          style={[styles.actionBtn, { backgroundColor: '#30d158' }]}
+          onPress={() => { onAction(item.id); onClose(); }}
+        >
+          <Text style={styles.actionBtnLabel}>Restore</Text>
+        </Pressable>
+      )}
     >
       <View style={[styles.balanceRow, styles.balanceRowSettled]}>
         <View style={styles.balanceLeft}>
@@ -212,6 +257,8 @@ export default function TabDetailScreen() {
   const { userId } = useSession();
   const [panel, setPanel] = useState<Panel>('expenses');
   const [refreshing, setRefreshing] = useState(false);
+  const [openExpenseId, setOpenExpenseId] = useState<string | null>(null);
+  const [openSettledId, setOpenSettledId] = useState<string | null>(null);
 
   // Don't hit the network for optimistic temp tabs — reads from seeded cache only.
   const isTemp = id?.startsWith('temp-') ?? false;
@@ -372,11 +419,6 @@ export default function TabDetailScreen() {
 
   const handleRestoreAction = useCallback(
     (settlementId: string) => restoreSettlement.mutate(settlementId),
-    [restoreSettlement]
-  );
-
-  const handleRestoreCommit = useCallback(
-    (settlementId: string) => restoreSettlement.commit(settlementId),
     [restoreSettlement]
   );
 
@@ -662,7 +704,14 @@ export default function TabDetailScreen() {
             keyExtractor={(item) => item.id}
             refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#fff" />}
             renderItem={({ item }) => (
-              <ExpenseRow item={item} onToggle={handleToggleExpense} />
+              <ExpenseRow
+                item={item}
+                isOpen={openExpenseId === item.id}
+                onOpen={() => setOpenExpenseId(item.id)}
+                onClose={() => setOpenExpenseId(null)}
+                onToggle={handleToggleExpense}
+                onPress={() => router.push(`/tab/${id}/edit-expense?expenseId=${item.id}`)}
+              />
             )}
             ListEmptyComponent={
               <View style={styles.emptyState}>
@@ -682,7 +731,13 @@ export default function TabDetailScreen() {
             refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#fff" />}
             ListHeaderComponent={balancesHeader}
             renderItem={({ item }) => (
-              <SettledRow item={item} onAction={handleRestoreAction} onCommit={handleRestoreCommit} />
+              <SettledRow
+                item={item}
+                isOpen={openSettledId === item.id}
+                onOpen={() => setOpenSettledId(item.id)}
+                onClose={() => setOpenSettledId(null)}
+                onAction={handleRestoreAction}
+              />
             )}
           />
           {!linksUnlocked && hasAnything && (
@@ -743,8 +798,23 @@ meta: { fontSize: 12, color: '#8e8e93', marginTop: 4 },
   expenseLeft: { flex: 1, marginRight: 12 },
   expenseTitle: { fontSize: 15, fontWeight: '500', color: '#fff' },
   expenseMeta: { fontSize: 12, color: '#8e8e93', marginTop: 2 },
+  expenseMetaRow: { flexDirection: 'row', alignItems: 'center', marginTop: 2, gap: 6 },
+  splitAvatarRow: { flexDirection: 'row', alignItems: 'center', gap: 3 },
+  splitAvatar: { width: 16, height: 16, borderRadius: 8, backgroundColor: '#48484a' },
+  splitAvatarDimmed: { backgroundColor: '#3a3a3c' },
+  splitAvatarOverflow: { justifyContent: 'center', alignItems: 'center' },
+  splitAvatarOverflowText: { fontSize: 7, color: '#8e8e93', fontWeight: '600' },
   expenseAmount: { fontSize: 15, fontWeight: '600', color: '#fff' },
   textRemoved: { color: '#555' },
+  textPressed: { opacity: 0.5 },
+
+  actionBtn: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+  },
+  actionBtnLabel: { color: '#fff', fontWeight: '600', fontSize: 14 },
 
   // ── Balances ──────────────────────────────────────────────
 
