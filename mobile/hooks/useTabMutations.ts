@@ -270,6 +270,37 @@ export function useRestoreSettlement(tabId: string) {
   return { mutate: mutation.mutate, commit };
 }
 
+// ─── useLeaveTab ──────────────────────────────────────────────────────────────
+// Two-phase: mutate() fires the API (called immediately on confirm), commit() removes
+// the row from the cache (called after the row animates away).
+
+export function useLeaveTab() {
+  const queryClient = useQueryClient();
+  const mutation = useMutation({
+    mutationFn: (tabId: string) =>
+      apiFetch(`/tabs/${tabId}/members/me`, { method: 'DELETE' }),
+    onMutate: async () => {
+      await queryClient.cancelQueries({ queryKey: TABS_KEY });
+      const previous = queryClient.getQueryData<Tab[]>(TABS_KEY);
+      return { previous };
+    },
+    onError: (_err, _tabId, ctx) => {
+      queryClient.setQueryData(TABS_KEY, ctx?.previous);
+    },
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: TABS_KEY });
+    },
+  });
+
+  const commit = useCallback((tabId: string) => {
+    queryClient.setQueryData<Tab[]>(TABS_KEY, (prev = []) =>
+      prev.filter((t) => t.id !== tabId)
+    );
+  }, [queryClient]);
+
+  return { mutate: mutation.mutate, commit };
+}
+
 // ─── useReSettleBalance ───────────────────────────────────────────────────────
 // Linking.openURL is called in the component before mutate().
 
