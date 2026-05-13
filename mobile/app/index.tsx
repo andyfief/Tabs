@@ -67,23 +67,21 @@ function TabRow({ item, onPress, onAction, onCommit, isLeaveMode, onLongPress, o
       <Pressable
         style={[styles.row, isLeaveMode && styles.rowLeaveMode]}
         onPress={isLeaveMode ? onLeaveDismiss : onPress}
-        onLongPress={() => onLongPress(item.id)}
+        onLongPress={() => isLeaveMode ? onLeaveDismiss() : onLongPress(item.id)}
         delayLongPress={400}
       >
         <Text style={styles.tabName}>{item.name}</Text>
-        <View style={styles.rowRight}>
-          {isLeaveMode ? (
-            <Pressable
-              style={styles.leaveBtn}
-              onPress={() => onLeaveConfirm(item.id)}
-              hitSlop={8}
-            >
-              <Text style={styles.leaveBtnText}>Leave Tab</Text>
-            </Pressable>
-          ) : (
-            <AvatarCircles count={item.member_count} />
-          )}
-        </View>
+        {isLeaveMode ? (
+          <Pressable
+            style={styles.leaveBtn}
+            onPress={() => onLeaveConfirm(item.id)}
+            hitSlop={8}
+          >
+            <Text style={styles.leaveBtnText}>Leave Tab</Text>
+          </Pressable>
+        ) : (
+          <AvatarCircles count={item.member_count} />
+        )}
       </Pressable>
     </SwipeToActionRow>
   );
@@ -357,7 +355,6 @@ const styles = StyleSheet.create({
     backgroundColor: DARK_CARD,
   },
   rowLeaveMode: { borderLeftWidth: 3, borderLeftColor: '#ff453a' },
-  rowRight: { flexDirection: 'row', alignItems: 'center' },
   leaveBtn: {
     paddingHorizontal: 12,
     paddingVertical: 6,

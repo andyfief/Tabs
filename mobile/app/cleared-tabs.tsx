@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import {
   ActivityIndicator,
   FlatList,
@@ -11,19 +12,29 @@ import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useQuery } from '@tanstack/react-query';
+import * as Haptics from 'expo-haptics';
 import { Tab, fetchAllTabs } from '../utils/tabQueries';
-import { useRestoreTab } from '../hooks/useTabMutations';
+import { useRestoreTab, useLeaveTab } from '../hooks/useTabMutations';
 
 const DARK_BG = '#1c1c1e';
 const DARK_CARD = '#2c2c2e';
 const DARK_BORDER = '#3a3a3c';
 
-function formatDate(iso: string): string {
-  return new Date(iso).toLocaleDateString(undefined, {
-    month: 'short',
-    day: 'numeric',
-    year: 'numeric',
-  });
+function AvatarCircles({ count }: { count: number }) {
+  const visible = Math.min(count, 3);
+  const overflow = count - visible;
+  return (
+    <View style={styles.avatarRow}>
+      {Array.from({ length: visible }).map((_, i) => (
+        <View key={i} style={styles.avatarCircle} />
+      ))}
+      {overflow > 0 && (
+        <View style={[styles.avatarCircle, styles.avatarOverflow]}>
+          <Text style={styles.avatarOverflowText}>+{overflow}</Text>
+        </View>
+      )}
+    </View>
+  );
 }
 
 type TabRowProps = {
@@ -31,9 +42,13 @@ type TabRowProps = {
   onPress: () => void;
   onAction: (id: string) => void;
   onCommit: (id: string) => void;
+  isLeaveMode: boolean;
+  onLongPress: (id: string) => void;
+  onLeaveConfirm: (id: string) => void;
+  onLeaveDismiss: () => void;
 };
 
-function ClearedTabRow({ item, onPress, onAction, onCommit }: TabRowProps) {
+function ClearedTabRow({ item, onPress, onAction, onCommit, isLeaveMode, onLongPress, onLeaveConfirm, onLeaveDismiss }: TabRowProps) {
   return (
     <SwipeToActionRow
       label="Restore"
@@ -43,14 +58,24 @@ function ClearedTabRow({ item, onPress, onAction, onCommit }: TabRowProps) {
       onAction={() => onAction(item.id)}
       onCommit={() => onCommit(item.id)}
     >
-      <Pressable style={styles.row} onPress={onPress}>
-        <View style={styles.rowLeft}>
-          <Text style={styles.tabName}>{item.name}</Text>
-          <Text style={styles.meta}>
-            {item.member_count} {item.member_count === 1 ? 'member' : 'members'}
-          </Text>
-        </View>
-        <Text style={styles.date}>Created {formatDate(item.created_at)}</Text>
+      <Pressable
+        style={[styles.row, isLeaveMode && styles.rowLeaveMode]}
+        onPress={isLeaveMode ? onLeaveDismiss : onPress}
+        onLongPress={() => isLeaveMode ? onLeaveDismiss() : onLongPress(item.id)}
+        delayLongPress={400}
+      >
+        <Text style={styles.tabName}>{item.name}</Text>
+        {isLeaveMode ? (
+          <Pressable
+            style={styles.leaveBtn}
+            onPress={() => onLeaveConfirm(item.id)}
+            hitSlop={8}
+          >
+            <Text style={styles.leaveBtnText}>Leave Tab</Text>
+          </Pressable>
+        ) : (
+          <AvatarCircles count={item.member_count} />
+        )}
       </Pressable>
     </SwipeToActionRow>
   );
@@ -59,7 +84,20 @@ function ClearedTabRow({ item, onPress, onAction, onCommit }: TabRowProps) {
 export default function ClearedTabsScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const [leavingTabId, setLeavingTabId] = useState<string | null>(null);
   const restoreTab = useRestoreTab();
+  const leaveTab = useLeaveTab();
+
+  function handleLongPress(id: string) {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    setLeavingTabId(id);
+  }
+
+  function handleLeaveConfirm(id: string) {
+    setLeavingTabId(null);
+    leaveTab.mutate(id);
+    leaveTab.commit(id);
+  }
 
   const { data: allTabs = [], isLoading, error } = useQuery({
     queryKey: ['tabs'],
@@ -99,9 +137,13 @@ export default function ClearedTabsScreen() {
         renderItem={({ item }) => (
           <ClearedTabRow
             item={item}
-            onPress={() => router.push(`/tab/${item.id}`)}
+            onPress={() => { setLeavingTabId(null); router.push(`/tab/${item.id}`); }}
             onAction={restoreTab.mutate}
             onCommit={restoreTab.commit}
+            isLeaveMode={leavingTabId === item.id}
+            onLongPress={handleLongPress}
+            onLeaveConfirm={handleLeaveConfirm}
+            onLeaveDismiss={() => setLeavingTabId(null)}
           />
         )}
         ListEmptyComponent={
@@ -132,18 +174,30 @@ const styles = StyleSheet.create({
   emptyContainer: { flex: 1 },
 
   row: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
     padding: 16,
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderColor: DARK_BORDER,
     backgroundColor: DARK_CARD,
   },
-  rowLeft: { flex: 1, marginRight: 12 },
-  tabName: { fontSize: 16, fontWeight: '600', color: '#fff' },
-  meta: { fontSize: 13, color: '#8e8e93', marginTop: 2 },
-  date: { fontSize: 12, color: '#8e8e93' },
+  rowLeaveMode: { borderLeftWidth: 3, borderLeftColor: '#ff453a' },
+  leaveBtn: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    backgroundColor: '#ff453a',
+    borderRadius: 6,
+  },
+  leaveBtnText: { color: '#fff', fontWeight: '600', fontSize: 13 },
+  tabName: { fontSize: 16, fontWeight: '600', color: '#fff', marginBottom: 8 },
+
+  avatarRow: { flexDirection: 'row', alignItems: 'center', gap: 5 },
+  avatarCircle: {
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    backgroundColor: '#48484a',
+  },
+  avatarOverflow: { justifyContent: 'center', alignItems: 'center' },
+  avatarOverflowText: { fontSize: 8, color: '#8e8e93', fontWeight: '600' },
 
   empty: { color: '#8e8e93', fontSize: 15 },
   error: { color: '#ff453a', fontSize: 14, textAlign: 'center', padding: 16 },
