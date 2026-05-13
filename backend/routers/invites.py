@@ -1,4 +1,5 @@
 import secrets
+from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from services.auth import get_current_user
@@ -88,10 +89,25 @@ def join_tab(
     if tab["status"] == "closed":
         raise HTTPException(status_code=400, detail="This tab is already closed.")
 
-    # Idempotent — only insert if not already a member
-    existing = sb.table("tab_members").select("user_id") \
-        .eq("tab_id", tab_id).eq("user_id", current_user).execute()
-    if not existing.data:
+    # Check for existing membership row (active or semi-left).
+    existing = (
+        sb.table("tab_members")
+        .select("user_id, left_at")
+        .eq("tab_id", tab_id)
+        .eq("user_id", current_user)
+        .execute()
+    )
+
+    if existing.data:
+        row = existing.data[0]
+        if row["left_at"] is not None:
+            # Semi-left rejoin: restore active state.
+            sb.table("tab_members").update({
+                "left_at": None,
+                "joined_at": datetime.now(timezone.utc).isoformat(),
+            }).eq("tab_id", tab_id).eq("user_id", current_user).execute()
+        # else: already active — idempotent, do nothing.
+    else:
         sb.table("tab_members").insert({"tab_id": tab_id, "user_id": current_user}).execute()
 
     return {"tab_id": tab_id, "tab_name": tab["name"]}

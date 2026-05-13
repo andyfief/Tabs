@@ -14,6 +14,7 @@ def _assert_member(sb, tab_id: str, user_id: str) -> None:
         .select("user_id")
         .eq("tab_id", tab_id)
         .eq("user_id", user_id)
+        .is_("left_at", "null")
         .execute()
     )
     if not res.data:

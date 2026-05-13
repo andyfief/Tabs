@@ -663,7 +663,7 @@ export default function TabDetailScreen() {
           </Pressable>
         </View>
         <Text style={styles.meta}>
-          {tab.members.length} {tab.members.length === 1 ? 'member' : 'members'} · {tab.status}
+          {tab.member_count} {tab.member_count === 1 ? 'member' : 'members'} · {tab.status}
         </Text>
       </View>
 

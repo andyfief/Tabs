@@ -19,7 +19,8 @@ def _delete_expired_cleared_tabs() -> None:
     sb = get_supabase()
     cutoff = datetime.now(timezone.utc) - timedelta(seconds=CLEARED_TAB_TTL_SECONDS)
 
-    res = sb.table("tab_members").select("tab_id, cleared_at").execute()
+    # Only active members (left_at IS NULL) count toward cleared-tab TTL.
+    res = sb.table("tab_members").select("tab_id, cleared_at").is_("left_at", "null").execute()
 
     tab_clearances: dict[str, list[datetime | None]] = defaultdict(list)
     for row in res.data:
@@ -69,6 +70,7 @@ def _fetch_tabs_for_ids(sb, tab_ids: list[str]) -> list[dict]:
             sb.table("tab_members")
             .select("user_id", count="exact")
             .eq("tab_id", tab["id"])
+            .is_("left_at", "null")
             .execute()
         )
         result.append({**tab, "member_count": count_res.count})
@@ -84,6 +86,7 @@ def list_all_tabs(current_user: str = Depends(get_current_user)) -> list[dict]:
         sb.table("tab_members")
         .select("tab_id, cleared_at")
         .eq("user_id", current_user)
+        .is_("left_at", "null")
         .execute()
     )
     if not memberships.data:
@@ -106,6 +109,7 @@ def list_all_tabs(current_user: str = Depends(get_current_user)) -> list[dict]:
             sb.table("tab_members")
             .select("user_id", count="exact")
             .eq("tab_id", tab["id"])
+            .is_("left_at", "null")
             .execute()
         )
         result.append({
@@ -168,6 +172,7 @@ def get_tab(tab_id: str, current_user: str = Depends(get_current_user)) -> dict:
         .select("user_id, links_unlocked_at")
         .eq("tab_id", tab_id)
         .eq("user_id", current_user)
+        .is_("left_at", "null")
         .execute()
     )
     if not membership.data:
@@ -185,13 +190,15 @@ def get_tab(tab_id: str, current_user: str = Depends(get_current_user)) -> dict:
         raise HTTPException(status_code=404, detail="Tab not found.")
     tab = tab_res.data[0]
 
+    # Fetch ALL members (including semi-left) so they appear in expense screens.
     members_res = (
         sb.table("tab_members")
-        .select("user_id")
+        .select("user_id, left_at")
         .eq("tab_id", tab_id)
         .execute()
     )
     member_ids = [row["user_id"] for row in members_res.data]
+    left_at_map = {row["user_id"]: row["left_at"] for row in members_res.data}
 
     users_res = (
         sb.table("users")
@@ -205,11 +212,14 @@ def get_tab(tab_id: str, current_user: str = Depends(get_current_user)) -> dict:
             "display_name": u["display_name"],
             "venmo_handle": u.get("venmo_handle"),
             "cashapp_handle": u.get("cashapp_handle"),
+            "left_at": left_at_map.get(u["id"]),
         }
         for u in users_res.data
     ]
 
-    return {**tab, "members": members, "links_unlocked": links_unlocked}
+    active_count = sum(1 for uid in member_ids if left_at_map.get(uid) is None)
+
+    return {**tab, "members": members, "links_unlocked": links_unlocked, "member_count": active_count}
 
 
 @router.post("/{tab_id}/unlock-balance-links")
@@ -237,7 +247,9 @@ def unlock_balance_links(tab_id: str, current_user: str = Depends(get_current_us
 
 @router.delete("/{tab_id}/members/me")
 def leave_tab(tab_id: str, current_user: str = Depends(get_current_user)) -> dict:
-    """Remove the current user from a tab. Deletes the tab entirely if they were the last member."""
+    """Semi-leave: set left_at on the membership row rather than deleting it.
+    The row is preserved so other members still see this user's expenses and balances.
+    Deletes the tab entirely if no active members remain."""
     sb = get_supabase()
 
     membership = (
@@ -245,17 +257,21 @@ def leave_tab(tab_id: str, current_user: str = Depends(get_current_user)) -> dic
         .select("user_id")
         .eq("tab_id", tab_id)
         .eq("user_id", current_user)
+        .is_("left_at", "null")
         .execute()
     )
     if not membership.data:
         raise HTTPException(status_code=403, detail="Not a member of this tab.")
 
-    sb.table("tab_members").delete().eq("tab_id", tab_id).eq("user_id", current_user).execute()
+    sb.table("tab_members").update(
+        {"left_at": datetime.now(timezone.utc).isoformat()}
+    ).eq("tab_id", tab_id).eq("user_id", current_user).execute()
 
     remaining = (
         sb.table("tab_members")
         .select("user_id", count="exact")
         .eq("tab_id", tab_id)
+        .is_("left_at", "null")
         .execute()
     )
     if remaining.count == 0:

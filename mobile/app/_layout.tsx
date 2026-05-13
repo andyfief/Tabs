@@ -10,14 +10,11 @@ import { AuthContext } from '../context/AuthContext';
 import { fetchAllTabs, fetchTabDetail } from '../utils/tabQueries';
 
 const LOADING_MESSAGES = [
-  'Calculating who owes what…',
-  'Splitting the bill…',
-  'Checking your tabs…',
-  'Tallying up expenses…',
-  'Almost there…',
-  'Waking up the backend…',
-  'Loading your tabs…',
-  'Counting every cent…',
+  'Splitting the bill...',
+  'Squaring things away...',
+  'Tallying up expenses...',
+  'Divvying it up...',
+  'Checking, double checking...',
 ];
 
 function LoadingScreen() {

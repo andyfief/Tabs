@@ -47,7 +47,7 @@ export default function AddExpenseScreen() {
   // The ref guard prevents a background refetch from resetting the user's selection.
   useEffect(() => {
     if (splitInitialized.current || members.length === 0) return;
-    setSplitIds(new Set(members.map((m) => m.user_id)));
+    setSplitIds(new Set(members.filter((m) => m.left_at === null).map((m) => m.user_id)));
     splitInitialized.current = true;
   }, [members]);
 
@@ -125,18 +125,22 @@ export default function AddExpenseScreen() {
       <Text style={styles.label}>Paid by *</Text>
       <View style={styles.listBox}>
         <ScrollView nestedScrollEnabled style={styles.scrollList}>
-          {members.map((m) => (
-            <Pressable
-              key={m.user_id}
-              style={styles.memberRow}
-              onPress={() => setPayerId(m.user_id)}
-            >
-              <View style={[styles.check, payerId === m.user_id && styles.checkSelected]}>
-                {payerId === m.user_id && <View style={styles.checkInner} />}
-              </View>
-              <Text style={styles.memberName}>{m.display_name}</Text>
-            </Pressable>
-          ))}
+          {members.map((m) => {
+            const hasLeft = m.left_at !== null;
+            return (
+              <Pressable
+                key={m.user_id}
+                style={styles.memberRow}
+                onPress={() => setPayerId(m.user_id)}
+              >
+                <View style={[styles.check, payerId === m.user_id && styles.checkSelected]}>
+                  {payerId === m.user_id && <View style={styles.checkInner} />}
+                </View>
+                <Text style={[styles.memberName, hasLeft && styles.memberNameLeft]}>{m.display_name}</Text>
+                {hasLeft && <Text style={styles.leftBadge}>left</Text>}
+              </Pressable>
+            );
+          })}
         </ScrollView>
       </View>
 
@@ -144,18 +148,22 @@ export default function AddExpenseScreen() {
       <Text style={styles.label}>Split between *</Text>
       <View style={styles.listBox}>
         <ScrollView nestedScrollEnabled style={styles.scrollList}>
-          {members.map((m) => (
-            <Pressable
-              key={m.user_id}
-              style={styles.memberRow}
-              onPress={() => toggleSplit(m.user_id)}
-            >
-              <View style={[styles.check, styles.checkSquare, splitIds.has(m.user_id) && styles.checkSelected]}>
-                {splitIds.has(m.user_id) && <View style={styles.checkInner} />}
-              </View>
-              <Text style={styles.memberName}>{m.display_name}</Text>
-            </Pressable>
-          ))}
+          {members.map((m) => {
+            const hasLeft = m.left_at !== null;
+            return (
+              <Pressable
+                key={m.user_id}
+                style={styles.memberRow}
+                onPress={() => toggleSplit(m.user_id)}
+              >
+                <View style={[styles.check, styles.checkSquare, splitIds.has(m.user_id) && styles.checkSelected]}>
+                  {splitIds.has(m.user_id) && <View style={styles.checkInner} />}
+                </View>
+                <Text style={[styles.memberName, hasLeft && styles.memberNameLeft]}>{m.display_name}</Text>
+                {hasLeft && <Text style={styles.leftBadge}>left</Text>}
+              </Pressable>
+            );
+          })}
         </ScrollView>
       </View>
 
@@ -215,6 +223,18 @@ const styles = StyleSheet.create({
     backgroundColor: DARK_CARD,
   },
   memberName: { fontSize: 15, marginLeft: 10, color: '#fff' },
+  memberNameLeft: { color: '#555' },
+  leftBadge: {
+    fontSize: 10,
+    color: '#8e8e93',
+    marginLeft: 6,
+    paddingHorizontal: 5,
+    paddingVertical: 2,
+    borderRadius: 4,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: '#48484a',
+    overflow: 'hidden',
+  },
 
   // Shared check indicator (radio = circle, checkbox = square)
   check: {

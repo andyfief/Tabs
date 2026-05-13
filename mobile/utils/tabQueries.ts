@@ -7,6 +7,7 @@ export type Member = {
   display_name: string;
   venmo_handle: string | null;
   cashapp_handle: string | null;
+  left_at: string | null; // null = active; ISO string = semi-left
 };
 
 export type TabDetail = {
@@ -16,6 +17,7 @@ export type TabDetail = {
   status: 'open' | 'closed';
   members: Member[];
   links_unlocked: boolean;
+  member_count: number; // active members only (left_at IS NULL)
 };
 
 export type Expense = {
