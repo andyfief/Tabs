@@ -16,7 +16,6 @@ import { useFocusEffect, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useQuery } from '@tanstack/react-query';
-import * as Haptics from 'expo-haptics';
 import { supabase } from '../utils/supabase';
 import { queryClient } from '../utils/queryClient';
 import { Tab, fetchAllTabs, fetchTabDetail } from '../utils/tabQueries';
@@ -45,43 +44,40 @@ function AvatarCircles({ count }: { count: number }) {
 
 type TabRowProps = {
   item: Tab;
+  isOpen: boolean;
+  onOpen: () => void;
+  onClose: () => void;
   onPress: () => void;
-  onAction: (id: string) => void;
-  onCommit: (id: string) => void;
-  isLeaveMode: boolean;
-  onLongPress: (id: string) => void;
-  onLeaveConfirm: (id: string) => void;
-  onLeaveDismiss: () => void;
+  onClear: (id: string) => void;
+  onLeave: (id: string) => void;
 };
 
-function TabRow({ item, onPress, onAction, onCommit, isLeaveMode, onLongPress, onLeaveConfirm, onLeaveDismiss }: TabRowProps) {
+function TabRow({ item, isOpen, onOpen, onClose, onPress, onClear, onLeave }: TabRowProps) {
   return (
     <SwipeToActionRow
-      label="Clear"
-      activeColor="#555"
-      dimColor="#2a2a2c"
-      disappears={true}
-      onAction={() => onAction(item.id)}
-      onCommit={() => onCommit(item.id)}
-    >
-      <Pressable
-        style={[styles.row, isLeaveMode && styles.rowLeaveMode]}
-        onPress={isLeaveMode ? onLeaveDismiss : onPress}
-        onLongPress={() => isLeaveMode ? onLeaveDismiss() : onLongPress(item.id)}
-        delayLongPress={400}
-      >
-        <Text style={styles.tabName}>{item.name}</Text>
-        {isLeaveMode ? (
+      isOpen={isOpen}
+      onOpen={onOpen}
+      onClose={onClose}
+      renderActions={() => (
+        <>
           <Pressable
-            style={styles.leaveBtn}
-            onPress={() => onLeaveConfirm(item.id)}
-            hitSlop={8}
+            style={[styles.actionBtn, styles.actionBtnClear]}
+            onPress={() => onClear(item.id)}
           >
-            <Text style={styles.leaveBtnText}>Leave Tab</Text>
+            <Text style={styles.actionBtnText}>Clear</Text>
           </Pressable>
-        ) : (
-          <AvatarCircles count={item.member_count} />
-        )}
+          <Pressable
+            style={[styles.actionBtn, styles.actionBtnLeave]}
+            onPress={() => onLeave(item.id)}
+          >
+            <Text style={styles.actionBtnText}>Leave Tab</Text>
+          </Pressable>
+        </>
+      )}
+    >
+      <Pressable style={styles.row} onPress={isOpen ? onClose : onPress}>
+        <Text style={styles.tabName}>{item.name}</Text>
+        <AvatarCircles count={item.member_count} />
       </Pressable>
     </SwipeToActionRow>
   );
@@ -134,7 +130,7 @@ export default function HomeScreen() {
   const insets = useSafeAreaInsets();
   const [menuOpen, setMenuOpen] = useState(false);
   const [creatingNew, setCreatingNew] = useState(false);
-  const [leavingTabId, setLeavingTabId] = useState<string | null>(null);
+  const [openTabId, setOpenTabId] = useState<string | null>(null);
   const createTab = useCreateTab();
   const clearTab = useClearTab();
   const leaveTab = useLeaveTab();
@@ -182,15 +178,15 @@ export default function HomeScreen() {
     itemVisiblePercentThreshold: 50,
   }).current;
 
-  function handleLongPress(id: string) {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    setLeavingTabId(id);
+  function handleClear(id: string) {
+    setOpenTabId(null);
+    clearTab.mutate(id);
+    clearTab.commit(id);
   }
 
-  function handleLeaveConfirm(id: string) {
-    setLeavingTabId(null);
+  function handleLeave(id: string) {
+    setOpenTabId(null);
     leaveTab.mutate(id);
-    // Optimistically remove from list immediately after confirm
     leaveTab.commit(id);
   }
 
@@ -260,13 +256,12 @@ export default function HomeScreen() {
         renderItem={({ item }) => (
           <TabRow
             item={item}
-            onPress={() => { setLeavingTabId(null); router.push(`/tab/${item.id}`); }}
-            onAction={clearTab.mutate}
-            onCommit={clearTab.commit}
-            isLeaveMode={leavingTabId === item.id}
-            onLongPress={handleLongPress}
-            onLeaveConfirm={handleLeaveConfirm}
-            onLeaveDismiss={() => setLeavingTabId(null)}
+            isOpen={openTabId === item.id}
+            onOpen={() => setOpenTabId(item.id)}
+            onClose={() => setOpenTabId(null)}
+            onPress={() => { setOpenTabId(null); router.push(`/tab/${item.id}`); }}
+            onClear={handleClear}
+            onLeave={handleLeave}
           />
         )}
         ListFooterComponent={
@@ -349,20 +344,25 @@ const styles = StyleSheet.create({
   menuItemSignOut: { fontSize: 15, color: '#ff453a' },
 
   row: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
     padding: 16,
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderColor: DARK_BORDER,
     backgroundColor: DARK_CARD,
   },
-  rowLeaveMode: { borderLeftWidth: 3, borderLeftColor: '#ff453a' },
-  leaveBtn: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    backgroundColor: '#ff453a',
-    borderRadius: 6,
+  tabName: { fontSize: 16, fontWeight: '600', color: '#fff' },
+
+  // Action buttons revealed on swipe
+  actionBtn: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
-  leaveBtnText: { color: '#fff', fontWeight: '600', fontSize: 13 },
-  tabName: { fontSize: 16, fontWeight: '600', color: '#fff', marginBottom: 8 },
+  actionBtnClear: { backgroundColor: '#3a3a3c' },
+  actionBtnLeave: { backgroundColor: '#ff453a' },
+  actionBtnText: { color: '#fff', fontWeight: '600', fontSize: 14 },
 
   // Avatar circles
   avatarRow: { flexDirection: 'row', alignItems: 'center', gap: 5 },
@@ -382,7 +382,6 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: '#fff',
     padding: 0,
-    marginBottom: 8,
   },
 
   bottomRow: {
