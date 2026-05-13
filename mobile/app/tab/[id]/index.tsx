@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -15,14 +15,15 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import * as Clipboard from 'expo-clipboard';
 import { SwipeToActionRow } from '../../../components/SwipeToActionRow';
-import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useQuery } from '@tanstack/react-query';
 import { apiFetch } from '../../../utils/api';
 import { queryClient } from '../../../utils/queryClient';
 import { fetchTabDetail } from '../../../utils/tabQueries';
 import { buildVenmoLink, buildCashAppLink } from '../../../utils/paymentLinks';
-import type { Expense, Tab, TabDetailFull, BalanceSettlement } from '../../../utils/tabQueries';
+import type { Expense, Tab, BalanceSettlement } from '../../../utils/tabQueries';
 import { useSession } from '../../../hooks/useSession';
+import { useRealtimeTab } from '../../../hooks/useRealtimeTab';
 import {
   useToggleExpense,
   useUnlockLinks,
@@ -275,6 +276,8 @@ export default function TabDetailScreen() {
   const restoreSettlement = useRestoreSettlement(id!);
   const reSettleBalance = useReSettleBalance(id!);
 
+  useRealtimeTab(isTemp ? null : (id ?? null));
+
   // Watch for the POST to resolve the temp ID, then silently swap the route param in-place.
   // router.setParams updates the URL without triggering a navigation animation.
   useEffect(() => {
@@ -357,23 +360,6 @@ export default function TabDetailScreen() {
   useEffect(() => {
     if (!isFetching) setRefreshing(false);
   }, [isFetching]);
-
-  // isTempRef lets the callback read the current value without being in the dep array.
-  // If isTemp were a dep, re-registering the callback when it flips false would cause
-  // an immediate re-fire on the already-focused screen, doubling the fetch.
-  const isTempRef = useRef(isTemp);
-  isTempRef.current = isTemp;
-
-  useFocusEffect(
-    useCallback(() => {
-      if (isTempRef.current) return;
-      // If an optimistic expense is pending (POST still in flight), skip the refetch —
-      // the POST handler's invalidateQueries will trigger it once the server responds.
-      const cached = queryClient.getQueryData<TabDetailFull>(['tab', id]);
-      if (cached?.expenses.some((e) => e.id.startsWith('temp-expense-'))) return;
-      refetch();
-    }, [refetch, id])
-  );
 
   const onRefresh = useCallback(() => {
     setRefreshing(true);

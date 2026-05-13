@@ -5,6 +5,7 @@ const BASE_URL = process.env.EXPO_PUBLIC_API_URL ?? 'http://localhost:8000';
 export async function apiFetch<T>(path: string, options?: RequestInit): Promise<T> {
   const { data: { session } } = await supabase.auth.getSession();
   const token = session?.access_token;
+  console.log('[api] user:', session?.user?.id, 'token prefix:', token?.slice(0, 20));
 
   const res = await fetch(`${BASE_URL}${path}`, {
     ...options,

@@ -31,7 +31,7 @@ export function useCreateTab() {
         { id: tempId, name, description: null, member_count: 1, created_at: new Date().toISOString(), is_cleared: false },
       ]);
       queryClient.setQueryData<TabDetailFull>(tabKey(tempId), {
-        tab: { id: tempId, name, description: null, status: 'open', members: [], links_unlocked: false },
+        tab: { id: tempId, name, description: null, status: 'open', members: [], links_unlocked: false, member_count: 1 },
         expenses: [],
         balances: [],
         settlements: [],
@@ -366,7 +366,9 @@ export function useAddExpense(tabId: string) {
         id: vars.tempId,
         title: vars.title,
         amount: vars.amount,
+        payer_id: vars.payerId,
         payer_name: vars.payerName,
+        split_member_ids: vars.splitMemberIds,
         created_at: new Date().toISOString(),
         removed_at: null,
       };
